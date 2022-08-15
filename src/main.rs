@@ -1,37 +1,17 @@
-use std::io::{stdin, stdout, Write};
-use std::ops::Sub;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use libmutex::urw_lock::UrwLock;
 
 fn main() {
-    // let pair = Arc::new((Mutex::new(false), Condvar::new()));
-    // let pair2 = pair.clone();
-    //
-    // // Inside of our lock, spawn a new thread, and then wait for it to start.
-    // thread::spawn(move || {
-    //     thread::sleep(Duration::from_millis(1_000));
-    //     println!("changing");
-    //     let &(ref lock, ref cvar) = &*pair2;
-    //     let mut started = lock.lock().unwrap();
-    //     *started = true;
-    //     // We notify the condvar that the value has changed.
-    //     cvar.notify_one();
-    // });
-    //
-    // // Wait for the thread to start up.
-    // let &(ref lock, ref cvar) = &*pair;
-    // let mut started = lock.lock().unwrap();
-    // while !*started {
-    //     println!("waiting");
-    //     started = cvar.wait(started).unwrap();
-    // }
     let num_readers = 8;
     let num_writers = 8;
     let num_downgraders = 8;
     let num_upgraders = 1;
     let iterations = 1_000;
+
+    let read_timeout = Duration::from_millis(10);
+
     let debug = false;
     // let num_readers = 0;
     // let num_writers = 0;
@@ -49,11 +29,35 @@ fn main() {
             let mut last_val = 0;
             for _ in 0..iterations {
                 {
-                    let val = protected.read().unwrap();
+                    let val = protected.read_x().unwrap();
                     if *val < last_val {
                         panic!("Error in reader: value went from {last_val} to {val}", val = *val);
                     }
                     last_val = *val;
+
+
+                    // let mut val = None;
+                    // while val.is_none() {
+                    //     val = protected.read_bounded(read_timeout);
+                    // }
+                    // let val = val.unwrap().unwrap();
+                    // if *val < last_val {
+                    //     panic!("Error in reader: value went from {last_val} to {val}", val = *val);
+                    // }
+                    // last_val = *val;
+
+
+                    // loop {
+                    //     let val = protected.read_bounded(read_timeout);
+                    //     if let Some(result) = val {
+                    //         let val = result.unwrap();
+                    //         if *val < last_val {
+                    //             panic!("Error in reader: value went from {last_val} to {val}", val = *val);
+                    //         }
+                    //         last_val = *val;
+                    //         break;
+                    //     }
+                    // }
                 }
                 thread::sleep(sleep_time);
             }
@@ -65,7 +69,7 @@ fn main() {
         threads.push(thread::spawn(move || {
             for _ in 0..iterations {
                 {
-                    let mut val = protected.write().unwrap();
+                    let mut val = protected.write_x().unwrap();
                     *val += 1;
                 }
                 thread::sleep(sleep_time);
