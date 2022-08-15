@@ -1,6 +1,7 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{
-    Condvar, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Condvar, LockResult, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    WaitTimeoutResult,
 };
 use std::time::{Duration, Instant};
 
@@ -90,9 +91,13 @@ impl Deadline {
     }
 
     fn saturating_add(instant: Instant, duration: Duration) -> Self {
-        match instant.checked_add(duration) {
-            None => Deadline::Perpetual,
-            Some(instant) => Deadline::Point(instant),
+        if duration == Duration::MAX {
+            Deadline::Perpetual
+        } else {
+            match instant.checked_add(duration) {
+                None => Deadline::Perpetual,
+                Some(instant) => Deadline::Point(instant),
+            }
         }
     }
 
@@ -130,10 +135,10 @@ impl<T> UrwLock<T> {
         let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
         while state.writer {
-            let (guard, maybe_timed_out) =
-                self.cond.wait_timeout(state, deadline.remaining()).unwrap();
+            let (guard, timed_out) =
+                cond_wait(&self.cond, state, deadline.remaining()).unwrap();
 
-            if maybe_timed_out.timed_out() {
+            if timed_out {
                 return None;
             }
             state = guard;
@@ -189,10 +194,10 @@ impl<T> UrwLock<T> {
         let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
         while state.readers != 0 || state.writer {
-            let (guard, maybe_timed_out) =
-                self.cond.wait_timeout(state, deadline.remaining()).unwrap();
+            let (guard, timed_out) =
+                cond_wait(&self.cond, state, deadline.remaining()).unwrap();
 
-            if maybe_timed_out.timed_out() {
+            if timed_out {
                 return None;
             }
             state = guard;
@@ -208,9 +213,7 @@ impl<T> UrwLock<T> {
         Some(pack(urw_guard, poisoned))
     }
 
-    pub fn write_x(
-        &self,
-    ) -> LockResult<UrwLockWriteGuard<'_, T>> {
+    pub fn write_x(&self) -> LockResult<UrwLockWriteGuard<'_, T>> {
         let mut state = self.state.lock().unwrap();
         while state.readers != 0 || state.writer {
             state = self.cond.wait(state).unwrap();
@@ -274,5 +277,19 @@ fn pack<T>(data: T, poisoned: bool) -> LockResult<T> {
         Err(PoisonError::new(data))
     } else {
         Ok(data)
+    }
+}
+
+fn cond_wait<'a, T>(
+    cond: &Condvar,
+    guard: MutexGuard<'a, T>,
+    duration: Duration,
+) -> LockResult<(MutexGuard<'a, T>, bool)> {
+    if duration == Duration::MAX {
+        let (guard, poisoned) = unpack(cond.wait(guard));
+        pack((guard, false), poisoned)
+    } else {
+        let ((guard, maybe_timed_out), poisoned) = unpack(cond.wait_timeout(guard, duration));
+        pack((guard, maybe_timed_out.timed_out()), poisoned)
     }
 }
