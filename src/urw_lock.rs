@@ -1,5 +1,5 @@
 use std::ops::{Deref, DerefMut};
-use std::sync::{Condvar, LockResult, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Condvar, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Debug, Default)]
 struct InternalState {
@@ -74,10 +74,11 @@ impl <T> UrwLock<T> {
         state.readers += 1;
         drop(state);
 
-        let data = self.data.read().unwrap();
-        Ok(UrwLockReadGuard {
+        let (data, poisoned) = unpack(self.data.read());
+        let urw_guard = UrwLockReadGuard {
             data, lock: self
-        })
+        };
+        pack(urw_guard, poisoned)
     }
 
     fn read_unlock(&self) {
@@ -98,15 +99,31 @@ impl <T> UrwLock<T> {
         state.writer = true;
         drop(state);
 
-        let data = self.data.write().unwrap();
-        Ok(UrwLockWriteGuard {
+        let (data, poisoned) = unpack(self.data.write());
+        let urw_guard = UrwLockWriteGuard {
             data, lock: self
-        })
+        };
+        pack(urw_guard, poisoned)
     }
 
     fn write_unlock(&self) {
         let mut state = self.state.lock().unwrap();
         state.writer = false;
         self.cond.notify_one();
+    }
+}
+
+fn unpack<T>(result: LockResult<T>) -> (T, bool) {
+    match result {
+        Ok(inner) => (inner, false),
+        Err(error) => (error.into_inner(), true)
+    }
+}
+
+fn pack<T>(data: T, poisoned: bool) -> LockResult<T> {
+    if poisoned {
+        Err(PoisonError::new(data))
+    } else {
+        Ok(data)
     }
 }
