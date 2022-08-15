@@ -1,3 +1,4 @@
+use std::io::{stdin, stdout, Write};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -25,8 +26,15 @@ fn main() {
     //     println!("waiting");
     //     started = cvar.wait(started).unwrap();
     // }
-    let (num_readers, num_writers) = (1_000, 100);
-    let iterations = 1_000;
+    let num_readers = 1_000;
+    let num_writers = 100;
+    let num_downgraders = 100;
+    let iterations = 100;
+    let debug = false;
+    // let num_readers = 0;
+    // let num_writers = 0;
+    // let num_downgraders = 2;
+    // let iterations = 1_000;
     let sleep_time = Duration::from_millis(0);
 
     let protected = Arc::new(UrwLock::new(0));
@@ -62,9 +70,32 @@ fn main() {
         }))
     }
 
+    for i in 0..num_downgraders {
+        let protected = protected.clone();
+        let i = i;
+        threads.push(thread::spawn(move || {
+            let mut last_val = 0;
+            for _ in 0..iterations {
+                {
+                    let mut val = protected.write().unwrap();
+                    if debug { println!("downgrader {i} write-locked"); }
+                    *val += 1;
+                    let val = val.downgrade();
+                    if debug { println!("downgrader {i} downgraded"); }
+                    if *val < last_val {
+                        panic!("Error in downgrader: value went from {last_val} to {val}", val = *val);
+                    }
+                    last_val = *val;
+                    if debug { println!("downgrader {i} read-unlocked"); }
+                }
+                thread::sleep(sleep_time);
+            }
+        }))
+    }
+
     for thread in threads {
         thread.join().unwrap();
     }
 
-    assert_eq!(num_writers * iterations, *protected.read().unwrap());
+    assert_eq!((num_writers + num_downgraders) * iterations, *protected.read().unwrap());
 }
