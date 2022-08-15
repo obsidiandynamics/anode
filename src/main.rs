@@ -1,7 +1,8 @@
 use std::io::{stdin, stdout, Write};
+use std::ops::Sub;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime};
 use libmutex::urw_lock::UrwLock;
 
 fn main() {
@@ -26,10 +27,11 @@ fn main() {
     //     println!("waiting");
     //     started = cvar.wait(started).unwrap();
     // }
-    let num_readers = 1_000;
-    let num_writers = 100;
-    let num_downgraders = 100;
-    let iterations = 100;
+    let num_readers = 8;
+    let num_writers = 8;
+    let num_downgraders = 8;
+    let num_upgraders = 1;
+    let iterations = 1_000;
     let debug = false;
     // let num_readers = 0;
     // let num_writers = 0;
@@ -39,7 +41,8 @@ fn main() {
 
     let protected = Arc::new(UrwLock::new(0));
 
-    let mut threads = vec![];
+    let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
+    let start_time = Instant::now();
     for _ in 0..num_readers {
         let protected = protected.clone();
         threads.push(thread::spawn(move || {
@@ -80,6 +83,7 @@ fn main() {
                     let mut val = protected.write().unwrap();
                     if debug { println!("downgrader {i} write-locked"); }
                     *val += 1;
+
                     let val = val.downgrade();
                     if debug { println!("downgrader {i} downgraded"); }
                     if *val < last_val {
@@ -93,9 +97,36 @@ fn main() {
         }))
     }
 
+    for i in 0..num_upgraders {
+        let protected = protected.clone();
+        let i = i;
+        threads.push(thread::spawn(move || {
+            let mut last_val = 0;
+            for _ in 0..iterations {
+                {
+                    let val = protected.read().unwrap();
+                    if debug { println!("upgrader {i} read-locked"); }
+                    if *val < last_val {
+                        panic!("Error in upgrader: value went from {last_val} to {val}", val = *val);
+                    }
+                    last_val = *val;
+
+                    let mut val = val.upgrade();
+                    if debug { println!("upgrader {i} upgraded"); }
+                    *val += 1;
+                    if debug { println!("upgrader {i} write-unlocked"); }
+                }
+                thread::sleep(sleep_time);
+            }
+        }))
+    }
+
     for thread in threads {
         thread.join().unwrap();
     }
-
-    assert_eq!((num_writers + num_downgraders) * iterations, *protected.read().unwrap());
+    let time_taken = (Instant::now() - start_time).as_secs_f64();
+    assert_eq!((num_writers + num_downgraders + num_upgraders) * iterations, *protected.read().unwrap());
+    let ops = (num_readers + num_writers + 2 * num_downgraders + 2 * num_upgraders) * iterations;
+    let rate = (ops as f64) / time_taken;
+    println!("{ops} ops took {time_taken:.3} seconds; {rate:.3} ops/s");
 }
