@@ -1,16 +1,20 @@
-use std::ops::{Deref, DerefMut};
-use std::sync::{Condvar, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::borrow::Borrow;
+use std::ops::{Add, Deref, DerefMut};
+use std::sync::{
+    Condvar, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Default)]
 struct InternalState {
     readers: u32,
-    writer: bool
+    writer: bool,
 }
 
 pub struct UrwLock<T: ?Sized> {
     state: Mutex<InternalState>,
     cond: Condvar,
-    data: RwLock<T>
+    data: RwLock<T>,
 }
 
 pub struct UrwLockReadGuard<'a, T> {
@@ -26,7 +30,7 @@ impl<T> Drop for UrwLockReadGuard<'_, T> {
     }
 }
 
-impl <'a, T> UrwLockReadGuard<'a, T> {
+impl<'a, T> UrwLockReadGuard<'a, T> {
     pub fn upgrade(mut self) -> UrwLockWriteGuard<'a, T> {
         self.data.take();
         self.lock.upgrade()
@@ -54,7 +58,7 @@ impl<T> Drop for UrwLockWriteGuard<'_, T> {
     }
 }
 
-impl <'a, T> UrwLockWriteGuard<'a, T> {
+impl<'a, T> UrwLockWriteGuard<'a, T> {
     pub fn downgrade(mut self) -> UrwLockReadGuard<'a, T> {
         self.data.take();
         self.lock.downgrade()
@@ -75,28 +79,76 @@ impl<T> DerefMut for UrwLockWriteGuard<'_, T> {
     }
 }
 
-impl <T> UrwLock<T> {
+enum Deadline {
+    Point(Instant),
+    Perpetual,
+    // Now
+}
+
+impl Deadline {
+    fn from_now(duration: Duration) -> Deadline {
+        // if duration.is_zero() {
+        //     UnboundedInstant::Now
+        // } else {
+        saturating_add(Instant::now(), duration)
+        // }
+    }
+
+    fn remaining(&self) -> Duration {
+        match self {
+            Deadline::Point(instant) => Instant::now() - *instant,
+            Deadline::Perpetual => Duration::MAX,
+            // UnboundedInstant::Now => Duration::ZERO,
+        }
+    }
+}
+
+fn saturating_add(instant: Instant, duration: Duration) -> Deadline {
+    match instant.checked_add(duration) {
+        None => Deadline::Perpetual,
+        Some(instant) => Deadline::Point(instant),
+    }
+}
+
+impl<T> UrwLock<T> {
     pub fn new(t: T) -> Self {
         Self {
             state: Mutex::new(InternalState::default()),
             cond: Condvar::new(),
-            data: RwLock::new(t)
+            data: RwLock::new(t),
         }
     }
 
     pub fn read(&self) -> LockResult<UrwLockReadGuard<'_, T>> {
+        self.read_bounded(Duration::MAX).unwrap()
+    }
+
+    pub fn read_bounded(&self, duration: Duration) -> Option<LockResult<UrwLockReadGuard<'_, T>>> {
         let mut state = self.state.lock().unwrap();
+        let mut deadline = None;
         while state.writer {
-            state = self.cond.wait(state).unwrap();
+            if deadline.is_none() {
+                // lazy initialisation of the deadline
+                deadline = Some(Deadline::from_now(duration));
+            }
+            let (guard, maybe_timed_out) = self
+                .cond
+                .wait_timeout(state, deadline.as_ref().unwrap().remaining())
+                .unwrap();
+            if maybe_timed_out.timed_out() {
+                return None;
+            }
+            state = guard;
         }
         state.readers += 1;
         drop(state);
 
         let (data, poisoned) = unpack(self.data.read());
         let urw_guard = UrwLockReadGuard {
-            data: Some(data), lock: self
+            data: Some(data),
+            lock: self,
         };
-        pack(urw_guard, poisoned)
+        Some(pack(urw_guard, poisoned))
     }
 
     fn read_unlock(&self) {
@@ -105,7 +157,7 @@ impl <T> UrwLock<T> {
         state.readers -= 1;
         let readers = state.readers;
         drop(state);
-        if readers == 1{
+        if readers == 1 {
             self.cond.notify_all();
         } else if readers == 0 {
             self.cond.notify_one();
@@ -122,7 +174,8 @@ impl <T> UrwLock<T> {
 
         let (data, poisoned) = unpack(self.data.write());
         let urw_guard = UrwLockWriteGuard {
-            data: Some(data), lock: self
+            data: Some(data),
+            lock: self,
         };
         pack(urw_guard, poisoned)
     }
@@ -142,7 +195,8 @@ impl <T> UrwLock<T> {
         self.cond.notify_all();
         let (data, _) = unpack(self.data.read());
         UrwLockReadGuard {
-            data: Some(data), lock: self
+            data: Some(data),
+            lock: self,
         }
     }
 
@@ -156,7 +210,8 @@ impl <T> UrwLock<T> {
         drop(state);
         let (data, _) = unpack(self.data.write());
         UrwLockWriteGuard {
-            data: Some(data), lock: self
+            data: Some(data),
+            lock: self,
         }
     }
 }
@@ -164,7 +219,7 @@ impl <T> UrwLock<T> {
 fn unpack<T>(result: LockResult<T>) -> (T, bool) {
     match result {
         Ok(inner) => (inner, false),
-        Err(error) => (error.into_inner(), true)
+        Err(error) => (error.into_inner(), true),
     }
 }
 
