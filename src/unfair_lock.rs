@@ -1,8 +1,10 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{
-    Condvar, LockResult, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration};
+use crate::utils;
+use crate::utils::Deadline;
 
 #[derive(Debug, Default)]
 struct InternalState {
@@ -31,8 +33,48 @@ impl<T> Drop for LockReadGuard<'_, T> {
 
 impl<'a, T> LockReadGuard<'a, T> {
     pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
-        self.data.take();
+        self.data = None;
         self.lock.upgrade()
+    }
+
+    pub fn try_upgrade(mut self, duration: Duration) -> MaybeUpgraded<'a, T> {
+        self.data = None;
+        match self.lock.try_upgrade(duration) {
+            None => {
+                self.data = Some(self.lock.restore_read_guard());
+                MaybeUpgraded::Unchanged(self)
+            }
+            Some(guard) => MaybeUpgraded::Upgraded(guard)
+        }
+    }
+}
+
+pub enum MaybeUpgraded<'a, T> {
+    Upgraded(LockWriteGuard<'a, T>),
+    Unchanged(LockReadGuard<'a, T>)
+}
+
+impl<'a, T> MaybeUpgraded<'a, T> {
+    pub fn is_upgraded(&self) -> bool {
+        matches!(self, MaybeUpgraded::Upgraded(_))
+    }
+
+    pub fn is_unchanged(&self) -> bool {
+        matches!(self, MaybeUpgraded::Unchanged(_))
+    }
+
+    pub fn upgraded(self) -> Option<LockWriteGuard<'a, T>> {
+        match self {
+            MaybeUpgraded::Upgraded(guard) => Some(guard),
+            MaybeUpgraded::Unchanged(_) => None
+        }
+    }
+
+    pub fn unchanged(self) -> Option<LockReadGuard<'a, T>> {
+        match self {
+            MaybeUpgraded::Upgraded(_) => None,
+            MaybeUpgraded::Unchanged(guard) => Some(guard)
+        }
     }
 }
 
@@ -59,7 +101,7 @@ impl<T> Drop for LockWriteGuard<'_, T> {
 
 impl<'a, T> LockWriteGuard<'a, T> {
     pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
-        self.data.take();
+        self.data = None;
         self.lock.downgrade()
     }
 }
@@ -78,49 +120,6 @@ impl<T> DerefMut for LockWriteGuard<'_, T> {
     }
 }
 
-enum Deadline {
-    Point(Instant),
-    Perpetual,
-    Uninitialized(Duration),
-    Elapsed,
-}
-
-impl Deadline {
-    fn after(duration: Duration) -> Self {
-        Self::Uninitialized(duration)
-    }
-
-    fn saturating_add(instant: Instant, duration: Duration) -> Self {
-        match instant.checked_add(duration) {
-            None => Deadline::Perpetual,
-            Some(instant) => Deadline::Point(instant),
-        }
-    }
-
-    fn ensure_initialized(&mut self) {
-        if let Self::Uninitialized(duration) = self {
-            if duration == &Duration::MAX {
-                *self = Deadline::Perpetual;
-            } else if duration ==  &Duration::ZERO {
-                *self = Deadline::Elapsed;
-            } else {
-                *self = Self::saturating_add(Instant::now(), *duration);
-            }
-        }
-    }
-
-    fn remaining(&mut self) -> Duration {
-        self.ensure_initialized();
-
-        match self {
-            Deadline::Point(instant) => Instant::now() - *instant,
-            Deadline::Perpetual => Duration::MAX,
-            Deadline::Elapsed => Duration::ZERO,
-            _ => unreachable!(),
-        }
-    }
-}
-
 impl<T> UnfairLock<T> {
     pub fn new(t: T) -> Self {
         Self {
@@ -130,16 +129,21 @@ impl<T> UnfairLock<T> {
         }
     }
 
+    pub fn into_inner(self) -> T {
+        let (data, _) = utils::unpack(self.data.into_inner());
+        data
+    }
+
     pub fn read(&self) -> LockReadGuard<'_, T> {
         self.try_read(Duration::MAX).unwrap()
     }
 
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
-        let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
+        let mut state = self.state.lock().unwrap();
         while state.writer {
             let (guard, timed_out) =
-                cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
 
             if timed_out {
                 return None;
@@ -149,12 +153,11 @@ impl<T> UnfairLock<T> {
         state.readers += 1;
         drop(state);
 
-        let (data, _) = unpack(self.data.read());
-        let read_guard = LockReadGuard {
+        let (data, _) = utils::unpack(self.data.read());
+        Some(LockReadGuard {
             data: Some(data),
             lock: self,
-        };
-        Some(read_guard)
+        })
     }
 
     fn read_unlock(&self) {
@@ -178,11 +181,11 @@ impl<T> UnfairLock<T> {
         &self,
         duration: Duration,
     ) -> Option<LockWriteGuard<'_, T>> {
-        let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
+        let mut state = self.state.lock().unwrap();
         while state.readers != 0 || state.writer {
             let (guard, timed_out) =
-                cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
 
             if timed_out {
                 return None;
@@ -192,12 +195,11 @@ impl<T> UnfairLock<T> {
         state.writer = true;
         drop(state);
 
-        let (data, _) = unpack(self.data.write());
-        let write_guard = LockWriteGuard {
+        let (data, _) = utils::unpack(self.data.write());
+        Some(LockWriteGuard {
             data: Some(data),
             lock: self,
-        };
-        Some(write_guard)
+        })
     }
 
     fn write_unlock(&self) {
@@ -213,7 +215,7 @@ impl<T> UnfairLock<T> {
         state.writer = false;
         drop(state);
         self.cond.notify_all();
-        let (data, _) = unpack(self.data.read());
+        let (data, _) = utils::unpack(self.data.read());
         LockReadGuard {
             data: Some(data),
             lock: self,
@@ -221,46 +223,36 @@ impl<T> UnfairLock<T> {
     }
 
     fn upgrade(&self) -> LockWriteGuard<'_, T> {
+        self.try_upgrade(Duration::MAX).unwrap()
+    }
+
+    fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T>> {
+        let mut deadline = Deadline::after(duration);
         let mut state = self.state.lock().unwrap();
         while state.readers != 1 {
-            state = self.cond.wait(state).unwrap();
+            let (guard, timed_out) =
+                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+
+            if timed_out {
+                return None;
+            }
+            state = guard;
         }
         state.readers = 0;
         state.writer = true;
         drop(state);
-        let (data, _) = unpack(self.data.write());
-        LockWriteGuard {
+        let (data, _) = utils::unpack(self.data.write());
+        Some(LockWriteGuard {
             data: Some(data),
             lock: self,
-        }
+        })
+    }
+
+    fn restore_read_guard(&self) -> RwLockReadGuard<'_, T> {
+        let (data, _) = utils::unpack(self.data.read());
+        data
     }
 }
 
-fn unpack<T>(result: LockResult<T>) -> (T, bool) {
-    match result {
-        Ok(inner) => (inner, false),
-        Err(error) => (error.into_inner(), true),
-    }
-}
-
-fn pack<T>(data: T, poisoned: bool) -> LockResult<T> {
-    if poisoned {
-        Err(PoisonError::new(data))
-    } else {
-        Ok(data)
-    }
-}
-
-fn cond_wait<'a, T>(
-    cond: &Condvar,
-    guard: MutexGuard<'a, T>,
-    duration: Duration,
-) -> LockResult<(MutexGuard<'a, T>, bool)> {
-    if duration == Duration::MAX {
-        let (guard, poisoned) = unpack(cond.wait(guard));
-        pack((guard, false), poisoned)
-    } else {
-        let ((guard, maybe_timed_out), poisoned) = unpack(cond.wait_timeout(guard, duration));
-        pack((guard, maybe_timed_out.timed_out()), poisoned)
-    }
-}
+#[cfg(test)]
+mod tests;
