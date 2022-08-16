@@ -1,5 +1,4 @@
 use std::ops::{Deref, DerefMut};
-use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::thread;
 
 #[derive(Debug)]
@@ -8,15 +7,12 @@ pub struct Chalice<T: ?Sized>{
     inner: T,
 }
 
-// impl<T: ?Sized> UnwindSafe for Chalice<T> {}
-// impl<T: ?Sized> RefUnwindSafe for Chalice<T> {}
-
 #[derive(Debug)]
-pub struct WriteGuard<'a, T: ?Sized> {
+pub struct MutGuard<'a, T: ?Sized> {
     chalice: &'a mut Chalice<T>
 }
 
-impl<T: ?Sized> Drop for WriteGuard<'_, T> {
+impl<T: ?Sized> Drop for MutGuard<'_, T> {
     fn drop(&mut self) {
         if thread::panicking() {
             self.chalice.poison();
@@ -24,17 +20,17 @@ impl<T: ?Sized> Drop for WriteGuard<'_, T> {
     }
 }
 
-impl<T> WriteGuard<'_, T> {
-    fn is_poisoned(&self) -> bool {
+impl<T> MutGuard<'_, T> {
+    pub fn is_poisoned(&self) -> bool {
         self.chalice.is_poisoned()
     }
 
-    fn clear_poison(&mut self) {
+    pub fn clear_poison(&mut self) {
         self.chalice.clear_poison()
     }
 }
 
-impl<T: ?Sized> Deref for WriteGuard<'_, T> {
+impl<T: ?Sized> Deref for MutGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -42,7 +38,7 @@ impl<T: ?Sized> Deref for WriteGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for WriteGuard<'_, T> {
+impl<T: ?Sized> DerefMut for MutGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.chalice.inner
     }
@@ -63,6 +59,21 @@ impl<T> Chalice<T> {
     }
 }
 
+pub type ChaliceResult<T> = Result<T, Poisoned<T>>;
+
+pub trait ChaliceResultExt<T> {
+    fn either(self) -> T;
+}
+
+impl<T> ChaliceResultExt<T> for ChaliceResult<T> {
+    fn either(self) -> T {
+        match self {
+            Ok(t) => t,
+            Err(Poisoned(t)) => t
+        }
+    }
+}
+
 impl<T: ?Sized> Chalice<T> {
     pub fn is_poisoned(&self) -> bool {
         self.poisoned
@@ -72,7 +83,7 @@ impl<T: ?Sized> Chalice<T> {
         self.poisoned = false
     }
 
-    pub fn borrow(&self) -> Result<&T, Poisoned<&T>> {
+    pub fn borrow(&self) -> ChaliceResult<&T> {
         if self.poisoned {
             Err(Poisoned(&self.inner))
         } else {
@@ -80,9 +91,9 @@ impl<T: ?Sized> Chalice<T> {
         }
     }
 
-    pub fn borrow_mut(&mut self) -> Result<WriteGuard<'_, T>, Poisoned<WriteGuard<'_, T>>> {
+    pub fn borrow_mut(&mut self) -> ChaliceResult<MutGuard<'_, T>> {
         let poisoned = self.poisoned;
-        let guard = WriteGuard { chalice: self };
+        let guard = MutGuard { chalice: self };
         if poisoned {
             Err(Poisoned(guard))
         } else {
