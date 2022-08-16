@@ -1,7 +1,6 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{
     Condvar, LockResult, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
-    WaitTimeoutResult,
 };
 use std::time::{Duration, Instant};
 
@@ -83,6 +82,7 @@ enum Deadline {
     Point(Instant),
     Perpetual,
     Uninitialized(Duration),
+    Elapsed,
 }
 
 impl Deadline {
@@ -91,19 +91,21 @@ impl Deadline {
     }
 
     fn saturating_add(instant: Instant, duration: Duration) -> Self {
-        if duration == Duration::MAX {
-            Deadline::Perpetual
-        } else {
-            match instant.checked_add(duration) {
-                None => Deadline::Perpetual,
-                Some(instant) => Deadline::Point(instant),
-            }
+        match instant.checked_add(duration) {
+            None => Deadline::Perpetual,
+            Some(instant) => Deadline::Point(instant),
         }
     }
 
     fn ensure_initialized(&mut self) {
         if let Self::Uninitialized(duration) = self {
-            *self = Self::saturating_add(Instant::now(), *duration);
+            if duration == &Duration::MAX {
+                *self = Deadline::Perpetual;
+            } else if duration ==  &Duration::ZERO {
+                *self = Deadline::Elapsed;
+            } else {
+                *self = Self::saturating_add(Instant::now(), *duration);
+            }
         }
     }
 
@@ -113,6 +115,7 @@ impl Deadline {
         match self {
             Deadline::Point(instant) => Instant::now() - *instant,
             Deadline::Perpetual => Duration::MAX,
+            Deadline::Elapsed => Duration::ZERO,
             _ => unreachable!(),
         }
     }
@@ -128,10 +131,10 @@ impl<T> UrwLock<T> {
     }
 
     pub fn read(&self) -> LockResult<UrwLockReadGuard<'_, T>> {
-        self.read_bounded(Duration::MAX).unwrap()
+        self.try_read(Duration::MAX).unwrap()
     }
 
-    pub fn read_bounded(&self, duration: Duration) -> Option<LockResult<UrwLockReadGuard<'_, T>>> {
+    pub fn try_read(&self, duration: Duration) -> Option<LockResult<UrwLockReadGuard<'_, T>>> {
         let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
         while state.writer {
@@ -154,22 +157,6 @@ impl<T> UrwLock<T> {
         Some(pack(urw_guard, poisoned))
     }
 
-    pub fn read_x(&self) -> LockResult<UrwLockReadGuard<'_, T>> {
-        let mut state = self.state.lock().unwrap();
-        while state.writer {
-            state = self.cond.wait(state).unwrap();
-        }
-        state.readers += 1;
-        drop(state);
-
-        let (data, poisoned) = unpack(self.data.read());
-        let urw_guard = UrwLockReadGuard {
-            data: Some(data),
-            lock: self,
-        };
-        pack(urw_guard, poisoned)
-    }
-
     fn read_unlock(&self) {
         let mut state = self.state.lock().unwrap();
         assert!(state.readers > 0, "readers: {}", state.readers);
@@ -184,10 +171,10 @@ impl<T> UrwLock<T> {
     }
 
     pub fn write(&self) -> LockResult<UrwLockWriteGuard<'_, T>> {
-        self.write_bounded(Duration::MAX).unwrap()
+        self.try_write(Duration::MAX).unwrap()
     }
 
-    pub fn write_bounded(
+    pub fn try_write(
         &self,
         duration: Duration,
     ) -> Option<LockResult<UrwLockWriteGuard<'_, T>>> {
@@ -211,22 +198,6 @@ impl<T> UrwLock<T> {
             lock: self,
         };
         Some(pack(urw_guard, poisoned))
-    }
-
-    pub fn write_x(&self) -> LockResult<UrwLockWriteGuard<'_, T>> {
-        let mut state = self.state.lock().unwrap();
-        while state.readers != 0 || state.writer {
-            state = self.cond.wait(state).unwrap();
-        }
-        state.writer = true;
-        drop(state);
-
-        let (data, poisoned) = unpack(self.data.write());
-        let urw_guard = UrwLockWriteGuard {
-            data: Some(data),
-            lock: self,
-        };
-        pack(urw_guard, poisoned)
     }
 
     fn write_unlock(&self) {

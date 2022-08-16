@@ -1,7 +1,8 @@
-use std::sync::{Arc};
+use std::ops::Deref;
+use std::sync::{Arc, LockResult};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::urw_lock::UrwLock;
+use libmutex::urw_lock::{UrwLock, UrwLockReadGuard, UrwLockWriteGuard};
 
 fn main() {
     let num_readers = 8;
@@ -10,7 +11,8 @@ fn main() {
     let num_upgraders = 1;
     let iterations = 1_000;
 
-    let read_timeout = Duration::from_millis(10);
+    let read_timeout = Duration::MAX;//Duration::from_millis(10);
+    let write_timeout = Duration::MAX;//Duration::from_millis(10);
 
     let debug = false;
     // let num_readers = 0;
@@ -29,35 +31,11 @@ fn main() {
             let mut last_val = 0;
             for _ in 0..iterations {
                 {
-                    let val = protected.read_x().unwrap();
+                    let val = read_eventually(&protected, read_timeout);
                     if *val < last_val {
                         panic!("Error in reader: value went from {last_val} to {val}", val = *val);
                     }
                     last_val = *val;
-
-
-                    // let mut val = None;
-                    // while val.is_none() {
-                    //     val = protected.read_bounded(read_timeout);
-                    // }
-                    // let val = val.unwrap().unwrap();
-                    // if *val < last_val {
-                    //     panic!("Error in reader: value went from {last_val} to {val}", val = *val);
-                    // }
-                    // last_val = *val;
-
-
-                    // loop {
-                    //     let val = protected.read_bounded(read_timeout);
-                    //     if let Some(result) = val {
-                    //         let val = result.unwrap();
-                    //         if *val < last_val {
-                    //             panic!("Error in reader: value went from {last_val} to {val}", val = *val);
-                    //         }
-                    //         last_val = *val;
-                    //         break;
-                    //     }
-                    // }
                 }
                 thread::sleep(sleep_time);
             }
@@ -67,9 +45,10 @@ fn main() {
     for _ in 0..num_writers {
         let protected = protected.clone();
         threads.push(thread::spawn(move || {
-            for _ in 0..iterations {
+            for i in 0..iterations {
                 {
-                    let mut val = protected.write_x().unwrap();
+                    let mut val = write_eventually(&protected, write_timeout);
+                    if debug { println!("writer {i} write-locked"); }
                     *val += 1;
                 }
                 thread::sleep(sleep_time);
@@ -108,10 +87,10 @@ fn main() {
             let mut last_val = 0;
             for _ in 0..iterations {
                 {
-                    let val = protected.read().unwrap();
+                    let val = read_eventually(&protected, read_timeout);
                     if debug { println!("upgrader {i} read-locked"); }
                     if *val < last_val {
-                        panic!("Error in upgrader: value went from {last_val} to {val}", val = *val);
+                        panic!("Error in reader: value went from {last_val} to {val}", val = *val);
                     }
                     last_val = *val;
 
@@ -133,4 +112,20 @@ fn main() {
     let ops = (num_readers + num_writers + 2 * num_downgraders + 2 * num_upgraders) * iterations;
     let rate = (ops as f64) / time_taken;
     println!("{ops} ops took {time_taken:.3} seconds; {rate:.3} ops/s");
+}
+
+fn read_eventually<T>(lock: &UrwLock<T>, duration: Duration) -> UrwLockReadGuard<T> {
+    let mut val: Option<LockResult<UrwLockReadGuard<T>>> = None;
+    while val.is_none() {
+        val = lock.try_read(duration);
+    }
+    val.unwrap().unwrap()
+}
+
+fn write_eventually<T>(lock: &UrwLock<T>, duration: Duration) -> UrwLockWriteGuard<T> {
+    let mut val: Option<LockResult<UrwLockWriteGuard<T>>> = None;
+    while val.is_none() {
+        val = lock.try_write(duration);
+    }
+    val.unwrap().unwrap()
 }
