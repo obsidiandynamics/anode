@@ -10,18 +10,18 @@ struct InternalState {
     writer: bool,
 }
 
-pub struct UrwLock<T: ?Sized> {
+pub struct UnfairLock<T: ?Sized> {
     state: Mutex<InternalState>,
     cond: Condvar,
     data: RwLock<T>,
 }
 
-pub struct UrwLockReadGuard<'a, T> {
+pub struct LockReadGuard<'a, T> {
     data: Option<RwLockReadGuard<'a, T>>,
-    lock: &'a UrwLock<T>,
+    lock: &'a UnfairLock<T>,
 }
 
-impl<T> Drop for UrwLockReadGuard<'_, T> {
+impl<T> Drop for LockReadGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.read_unlock();
@@ -29,14 +29,14 @@ impl<T> Drop for UrwLockReadGuard<'_, T> {
     }
 }
 
-impl<'a, T> UrwLockReadGuard<'a, T> {
-    pub fn upgrade(mut self) -> UrwLockWriteGuard<'a, T> {
+impl<'a, T> LockReadGuard<'a, T> {
+    pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
         self.data.take();
         self.lock.upgrade()
     }
 }
 
-impl<T> Deref for UrwLockReadGuard<'_, T> {
+impl<T> Deref for LockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -44,12 +44,12 @@ impl<T> Deref for UrwLockReadGuard<'_, T> {
     }
 }
 
-pub struct UrwLockWriteGuard<'a, T> {
+pub struct LockWriteGuard<'a, T> {
     data: Option<RwLockWriteGuard<'a, T>>,
-    lock: &'a UrwLock<T>,
+    lock: &'a UnfairLock<T>,
 }
 
-impl<T> Drop for UrwLockWriteGuard<'_, T> {
+impl<T> Drop for LockWriteGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.write_unlock();
@@ -57,14 +57,14 @@ impl<T> Drop for UrwLockWriteGuard<'_, T> {
     }
 }
 
-impl<'a, T> UrwLockWriteGuard<'a, T> {
-    pub fn downgrade(mut self) -> UrwLockReadGuard<'a, T> {
+impl<'a, T> LockWriteGuard<'a, T> {
+    pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
         self.data.take();
         self.lock.downgrade()
     }
 }
 
-impl<T> Deref for UrwLockWriteGuard<'_, T> {
+impl<T> Deref for LockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -72,7 +72,7 @@ impl<T> Deref for UrwLockWriteGuard<'_, T> {
     }
 }
 
-impl<T> DerefMut for UrwLockWriteGuard<'_, T> {
+impl<T> DerefMut for LockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.data.as_mut().unwrap().deref_mut()
     }
@@ -121,7 +121,7 @@ impl Deadline {
     }
 }
 
-impl<T> UrwLock<T> {
+impl<T> UnfairLock<T> {
     pub fn new(t: T) -> Self {
         Self {
             state: Mutex::new(InternalState::default()),
@@ -130,11 +130,11 @@ impl<T> UrwLock<T> {
         }
     }
 
-    pub fn read(&self) -> LockResult<UrwLockReadGuard<'_, T>> {
+    pub fn read(&self) -> LockReadGuard<'_, T> {
         self.try_read(Duration::MAX).unwrap()
     }
 
-    pub fn try_read(&self, duration: Duration) -> Option<LockResult<UrwLockReadGuard<'_, T>>> {
+    pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
         let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
         while state.writer {
@@ -149,12 +149,12 @@ impl<T> UrwLock<T> {
         state.readers += 1;
         drop(state);
 
-        let (data, poisoned) = unpack(self.data.read());
-        let urw_guard = UrwLockReadGuard {
+        let (data, _) = unpack(self.data.read());
+        let read_guard = LockReadGuard {
             data: Some(data),
             lock: self,
         };
-        Some(pack(urw_guard, poisoned))
+        Some(read_guard)
     }
 
     fn read_unlock(&self) {
@@ -170,14 +170,14 @@ impl<T> UrwLock<T> {
         }
     }
 
-    pub fn write(&self) -> LockResult<UrwLockWriteGuard<'_, T>> {
+    pub fn write(&self) -> LockWriteGuard<'_, T> {
         self.try_write(Duration::MAX).unwrap()
     }
 
     pub fn try_write(
         &self,
         duration: Duration,
-    ) -> Option<LockResult<UrwLockWriteGuard<'_, T>>> {
+    ) -> Option<LockWriteGuard<'_, T>> {
         let mut state = self.state.lock().unwrap();
         let mut deadline = Deadline::after(duration);
         while state.readers != 0 || state.writer {
@@ -192,12 +192,12 @@ impl<T> UrwLock<T> {
         state.writer = true;
         drop(state);
 
-        let (data, poisoned) = unpack(self.data.write());
-        let urw_guard = UrwLockWriteGuard {
+        let (data, _) = unpack(self.data.write());
+        let write_guard = LockWriteGuard {
             data: Some(data),
             lock: self,
         };
-        Some(pack(urw_guard, poisoned))
+        Some(write_guard)
     }
 
     fn write_unlock(&self) {
@@ -207,20 +207,20 @@ impl<T> UrwLock<T> {
         self.cond.notify_one();
     }
 
-    fn downgrade(&self) -> UrwLockReadGuard<'_, T> {
+    fn downgrade(&self) -> LockReadGuard<'_, T> {
         let mut state = self.state.lock().unwrap();
         state.readers = 1;
         state.writer = false;
         drop(state);
         self.cond.notify_all();
         let (data, _) = unpack(self.data.read());
-        UrwLockReadGuard {
+        LockReadGuard {
             data: Some(data),
             lock: self,
         }
     }
 
-    fn upgrade(&self) -> UrwLockWriteGuard<'_, T> {
+    fn upgrade(&self) -> LockWriteGuard<'_, T> {
         let mut state = self.state.lock().unwrap();
         while state.readers != 1 {
             state = self.cond.wait(state).unwrap();
@@ -229,7 +229,7 @@ impl<T> UrwLock<T> {
         state.writer = true;
         drop(state);
         let (data, _) = unpack(self.data.write());
-        UrwLockWriteGuard {
+        LockWriteGuard {
             data: Some(data),
             lock: self,
         }

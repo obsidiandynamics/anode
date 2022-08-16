@@ -1,8 +1,7 @@
-use std::ops::Deref;
-use std::sync::{Arc, LockResult};
+use std::sync::{Arc};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::urw_lock::{UrwLock, UrwLockReadGuard, UrwLockWriteGuard};
+use libmutex::unfair_lock::{UnfairLock, LockReadGuard, LockWriteGuard};
 
 fn main() {
     let num_readers = 8;
@@ -21,7 +20,7 @@ fn main() {
     // let iterations = 1_000;
     let sleep_time = Duration::from_millis(0);
 
-    let protected = Arc::new(UrwLock::new(0));
+    let protected = Arc::new(UnfairLock::new(0));
 
     let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
     let start_time = Instant::now();
@@ -63,7 +62,7 @@ fn main() {
             let mut last_val = 0;
             for _ in 0..iterations {
                 {
-                    let mut val = protected.write().unwrap();
+                    let mut val = protected.write();
                     if debug { println!("downgrader {i} write-locked"); }
                     *val += 1;
 
@@ -108,24 +107,24 @@ fn main() {
         thread.join().unwrap();
     }
     let time_taken = (Instant::now() - start_time).as_secs_f64();
-    assert_eq!((num_writers + num_downgraders + num_upgraders) * iterations, *protected.read().unwrap());
+    assert_eq!((num_writers + num_downgraders + num_upgraders) * iterations, *protected.read());
     let ops = (num_readers + num_writers + 2 * num_downgraders + 2 * num_upgraders) * iterations;
     let rate = (ops as f64) / time_taken;
     println!("{ops} ops took {time_taken:.3} seconds; {rate:.3} ops/s");
 }
 
-fn read_eventually<T>(lock: &UrwLock<T>, duration: Duration) -> UrwLockReadGuard<T> {
-    let mut val: Option<LockResult<UrwLockReadGuard<T>>> = None;
+fn read_eventually<T>(lock: &UnfairLock<T>, duration: Duration) -> LockReadGuard<T> {
+    let mut val = None;
     while val.is_none() {
         val = lock.try_read(duration);
     }
-    val.unwrap().unwrap()
+    val.unwrap()
 }
 
-fn write_eventually<T>(lock: &UrwLock<T>, duration: Duration) -> UrwLockWriteGuard<T> {
-    let mut val: Option<LockResult<UrwLockWriteGuard<T>>> = None;
+fn write_eventually<T>(lock: &UnfairLock<T>, duration: Duration) -> LockWriteGuard<T> {
+    let mut val = None;
     while val.is_none() {
         val = lock.try_write(duration);
     }
-    val.unwrap().unwrap()
+    val.unwrap()
 }
