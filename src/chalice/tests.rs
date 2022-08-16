@@ -10,11 +10,7 @@ use crate::test_utils::UnwindableRefCell;
 fn chalice_unsized() {
     let ref_chalice: &Chalice<dyn Display> = &Chalice::new("test");
     let ref_dyn_display = ref_chalice.borrow().either();
-    assert_eq!("test", display(ref_dyn_display));
-}
-
-fn display<D: Display>(d: D) -> String {
-    format!("{d}")
+    assert_eq!("test", ref_dyn_display.to_string());
 }
 
 #[test]
