@@ -1,6 +1,7 @@
 use std::sync::{Condvar, LockResult, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+#[derive(Debug)]
 pub enum Deadline {
     Point(Instant),
     Perpetual,
@@ -36,7 +37,7 @@ impl Deadline {
         self.ensure_initialized();
 
         match self {
-            Deadline::Point(instant) => Instant::now() - *instant,
+            Deadline::Point(instant) => *instant - Instant::now(),
             Deadline::Perpetual => Duration::MAX,
             Deadline::Elapsed => Duration::ZERO,
             _ => unreachable!(),
@@ -64,7 +65,9 @@ pub fn cond_wait<'a, T>(
     guard: MutexGuard<'a, T>,
     duration: Duration,
 ) -> LockResult<(MutexGuard<'a, T>, bool)> {
-    if duration == Duration::MAX {
+    if duration.is_zero() {
+        pack((guard, true), false)
+    } else if duration == Duration::MAX {
         let (guard, poisoned) = unpack(cond.wait(guard));
         pack((guard, false), poisoned)
     } else {

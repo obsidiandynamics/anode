@@ -1,5 +1,7 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::panic::RefUnwindSafe;
+use std::sync::Mutex;
+use std::thread::JoinHandle;
 
 pub struct UnwindableRefCell<T: ?Sized> {
     inner: RefCell<T>,
@@ -26,3 +28,8 @@ impl<T: ?Sized> UnwindableRefCell<T> {
 }
 
 impl<T> RefUnwindSafe for UnwindableRefCell<T> {}
+
+// pub struct BackgroundTask<T> {
+//     inner: Mutex<Option<T>>,
+//     handle: Option<JoinHandle<T>>
+// }

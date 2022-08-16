@@ -14,7 +14,7 @@ fn main() {
 
     let read_timeout = Duration::MAX;//Duration::from_millis(10);
     let write_timeout = Duration::MAX;//Duration::from_millis(10);
-    let upgrade_timeout = Duration::ZERO;
+    let upgrade_timeout = Duration::ZERO;//Duration::from_millis(1);
 
     let debug_locks = false;
     let debug_exits = false;

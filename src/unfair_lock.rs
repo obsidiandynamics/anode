@@ -12,12 +12,14 @@ struct InternalState {
     writer: bool,
 }
 
+#[derive(Debug)]
 pub struct UnfairLock<T: ?Sized> {
     state: Mutex<InternalState>,
     cond: Condvar,
     data: RwLock<T>,
 }
 
+#[derive(Debug)]
 pub struct LockReadGuard<'a, T> {
     data: Option<RwLockReadGuard<'a, T>>,
     lock: &'a UnfairLock<T>,
@@ -49,6 +51,7 @@ impl<'a, T> LockReadGuard<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum MaybeUpgraded<'a, T> {
     Upgraded(LockWriteGuard<'a, T>),
     Unchanged(LockReadGuard<'a, T>)
@@ -86,6 +89,7 @@ impl<T> Deref for LockReadGuard<'_, T> {
     }
 }
 
+#[derive(Debug)]
 pub struct LockWriteGuard<'a, T> {
     data: Option<RwLockWriteGuard<'a, T>>,
     lock: &'a UnfairLock<T>,
@@ -184,6 +188,7 @@ impl<T> UnfairLock<T> {
         let mut deadline = Deadline::after(duration);
         let mut state = self.state.lock().unwrap();
         while state.readers != 0 || state.writer {
+            // println!("Remaining {remaining:?}, duration={duration:?}, deadline={deadline:?}");
             let (guard, timed_out) =
                 utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
 
