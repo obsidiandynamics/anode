@@ -143,7 +143,7 @@ impl<T> UnfairLock<T> {
     }
 
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
-        let mut deadline = Deadline::after(duration);
+        let mut deadline = Deadline::lazy_after(duration);
         let mut state = self.state.lock().unwrap();
         while state.writer {
             let (guard, timed_out) =
@@ -185,7 +185,7 @@ impl<T> UnfairLock<T> {
         &self,
         duration: Duration,
     ) -> Option<LockWriteGuard<'_, T>> {
-        let mut deadline = Deadline::after(duration);
+        let mut deadline = Deadline::lazy_after(duration);
         let mut state = self.state.lock().unwrap();
         while state.readers != 0 || state.writer {
             // println!("Remaining {remaining:?}, duration={duration:?}, deadline={deadline:?}");
@@ -232,7 +232,7 @@ impl<T> UnfairLock<T> {
     }
 
     fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T>> {
-        let mut deadline = Deadline::after(duration);
+        let mut deadline = Deadline::lazy_after(duration);
         let mut state = self.state.lock().unwrap();
         while state.readers != 1 {
             let (guard, timed_out) =

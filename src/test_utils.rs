@@ -1,6 +1,8 @@
 use std::cell::{Ref, RefCell, RefMut};
+use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
-use std::sync::Mutex;
+use std::sync::{Arc, Barrier, Mutex};
+use std::{fmt, thread};
 use std::thread::JoinHandle;
 
 pub struct UnwindableRefCell<T: ?Sized> {
@@ -9,7 +11,9 @@ pub struct UnwindableRefCell<T: ?Sized> {
 
 impl<T> UnwindableRefCell<T> {
     pub fn new(t: T) -> Self {
-        Self { inner: RefCell::new(t) }
+        Self {
+            inner: RefCell::new(t),
+        }
     }
 
     pub fn into_inner(self) -> T {
@@ -29,7 +33,44 @@ impl<T: ?Sized> UnwindableRefCell<T> {
 
 impl<T> RefUnwindSafe for UnwindableRefCell<T> {}
 
-// pub struct BackgroundTask<T> {
-//     inner: Mutex<Option<T>>,
-//     handle: Option<JoinHandle<T>>
-// }
+/// Spawns a new thread and waits until its closure has _started_ executing.
+///
+/// Useful for _probabilistically_ testing code where a thread will start off by blocking
+/// on something, and we want to verify that the thread is, indeed, blocked. This function
+/// only guarantees that the closure has begun executing; it doesn't guarantee
+/// that the thread has blocked. Nonetheless, by the time `spawn_blocked` returns,
+/// its highly likely that the thread entered the blocked state. It saves us having to
+/// add a [`thread::sleep`].
+///
+/// # Examples (not compiled)
+/// ```
+/// use libmutex::test_utils::spawn_blocked;
+/// let thread = spawn_blocked(|| {
+///     // wait_for_something_important
+/// });
+/// assert!(!thread.is_finished());
+/// ```
+pub fn spawn_blocked<F, T>(f: F) -> JoinHandle<T>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    let barrier = Arc::new(Barrier::new(2));
+    let _barrier = barrier.clone();
+    let thread = thread::spawn(move || {
+        _barrier.wait();
+        f()
+    });
+    barrier.wait();
+    thread
+}
+
+pub struct NoPrettyPrint<T: Debug>(pub T);
+
+impl<T: Debug> Debug for NoPrettyPrint<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        // {:#?} never used here even if dbg!() specifies it
+        write!(f, "{:?}", self.0)
+    }
+}

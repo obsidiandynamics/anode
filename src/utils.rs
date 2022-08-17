@@ -10,8 +10,14 @@ pub enum Deadline {
 }
 
 impl Deadline {
-    pub fn after(duration: Duration) -> Self {
+    pub fn lazy_after(duration: Duration) -> Self {
         Self::Uninitialized(duration)
+    }
+
+    pub fn after(duration: Duration) -> Self {
+        let mut deadline = Self::lazy_after(duration);
+        deadline.ensure_initialized();
+        deadline
     }
 
     fn saturating_add(instant: Instant, duration: Duration) -> Self {
