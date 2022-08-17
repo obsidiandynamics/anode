@@ -1,10 +1,11 @@
-use std::ptr::read;
-use std::sync::{Arc, Barrier, Mutex};
+//! A test suite "borrowed" from [TransRAM](https://github.com/obsidiandynamics/transram).
+
+use std::sync::{Arc, Barrier};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use crate::test_utils;
-use crate::test_utils::NoPrettyPrint;
+use crate::test_utils::{CHECK_WAIT, LONG_WAIT, SHORT_WAIT};
 use super::UnfairLock;
 
 #[test]
@@ -99,10 +100,6 @@ fn read_acquire_while_read_locked() {
     drop(guard_1);
     drop(guard_2);
 }
-
-const SHORT_WAIT: Duration = Duration::from_micros(1);
-const LONG_WAIT: Duration = Duration::from_secs(10);
-const CHECK_WAIT: Duration = Duration::from_millis(5);
 
 #[test]
 fn timeout_on_write_acquire_while_read_locked() {

@@ -1,8 +1,8 @@
 use std::sync::{Arc};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::unfair_lock::{UnfairLock, LockReadGuard, LockWriteGuard, MaybeUpgraded};
+use libmutex::unfair_lock::{UnfairLock, LockReadGuard, LockWriteGuard};
 use libmutex::unfair_lock::MaybeUpgraded::{Unchanged, Upgraded};
 
 fn main() {

@@ -3,8 +3,8 @@ use std::sync::{
     Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
 use std::time::{Duration};
+use crate::deadline::Deadline;
 use crate::utils;
-use crate::utils::Deadline;
 
 #[derive(Debug, Default)]
 struct InternalState {
@@ -19,13 +19,12 @@ pub struct UnfairLock<T: ?Sized> {
     data: RwLock<T>,
 }
 
-#[derive(Debug)]
-pub struct LockReadGuard<'a, T> {
+pub struct LockReadGuard<'a, T: ?Sized> {
     data: Option<RwLockReadGuard<'a, T>>,
     lock: &'a UnfairLock<T>,
 }
 
-impl<T> Drop for LockReadGuard<'_, T> {
+impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.read_unlock();
@@ -33,7 +32,7 @@ impl<T> Drop for LockReadGuard<'_, T> {
     }
 }
 
-impl<'a, T> LockReadGuard<'a, T> {
+impl<'a, T: ?Sized> LockReadGuard<'a, T> {
     pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
         self.data = None;
         self.lock.upgrade()
@@ -51,13 +50,12 @@ impl<'a, T> LockReadGuard<'a, T> {
     }
 }
 
-#[derive(Debug)]
-pub enum MaybeUpgraded<'a, T> {
+pub enum MaybeUpgraded<'a, T: ?Sized> {
     Upgraded(LockWriteGuard<'a, T>),
     Unchanged(LockReadGuard<'a, T>)
 }
 
-impl<'a, T> MaybeUpgraded<'a, T> {
+impl<'a, T: ?Sized> MaybeUpgraded<'a, T> {
     pub fn is_upgraded(&self) -> bool {
         matches!(self, MaybeUpgraded::Upgraded(_))
     }
@@ -81,7 +79,7 @@ impl<'a, T> MaybeUpgraded<'a, T> {
     }
 }
 
-impl<T> Deref for LockReadGuard<'_, T> {
+impl<T: ?Sized> Deref for LockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -89,13 +87,12 @@ impl<T> Deref for LockReadGuard<'_, T> {
     }
 }
 
-#[derive(Debug)]
-pub struct LockWriteGuard<'a, T> {
+pub struct LockWriteGuard<'a, T: ?Sized> {
     data: Option<RwLockWriteGuard<'a, T>>,
     lock: &'a UnfairLock<T>,
 }
 
-impl<T> Drop for LockWriteGuard<'_, T> {
+impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.write_unlock();
@@ -103,14 +100,14 @@ impl<T> Drop for LockWriteGuard<'_, T> {
     }
 }
 
-impl<'a, T> LockWriteGuard<'a, T> {
+impl<'a, T: ?Sized> LockWriteGuard<'a, T> {
     pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
         self.data = None;
         self.lock.downgrade()
     }
 }
 
-impl<T> Deref for LockWriteGuard<'_, T> {
+impl<T: ?Sized> Deref for LockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -118,7 +115,7 @@ impl<T> Deref for LockWriteGuard<'_, T> {
     }
 }
 
-impl<T> DerefMut for LockWriteGuard<'_, T> {
+impl<T: ?Sized> DerefMut for LockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.data.as_mut().unwrap().deref_mut()
     }
@@ -137,7 +134,9 @@ impl<T> UnfairLock<T> {
         let (data, _) = utils::unpack(self.data.into_inner());
         data
     }
+}
 
+impl<T: ?Sized> UnfairLock<T> {
     pub fn read(&self) -> LockReadGuard<'_, T> {
         self.try_read(Duration::MAX).unwrap()
     }
@@ -257,7 +256,20 @@ impl<T> UnfairLock<T> {
         let (data, _) = utils::unpack(self.data.read());
         data
     }
+
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Since this call borrows the [`UnfairLock`] mutably, no actual locking needs to
+    /// take place---the mutable borrow statically guarantees no locks exist.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
+        let (data, _) = utils::unpack(self.data.get_mut());
+        data
+    }
 }
 
 #[cfg(test)]
-mod tests;
+mod transram_tests;
+
+#[cfg(test)]
+mod parking_lot_tests;

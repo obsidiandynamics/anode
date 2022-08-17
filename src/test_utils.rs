@@ -1,9 +1,15 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::{Arc, Barrier};
 use std::{fmt, thread};
 use std::thread::JoinHandle;
+use std::time::Duration;
+
+// Constants used for waiting in tests.
+pub const SHORT_WAIT: Duration = Duration::from_micros(1);
+pub const LONG_WAIT: Duration = Duration::from_secs(10);
+pub const CHECK_WAIT: Duration = Duration::from_millis(5);
 
 pub struct UnwindableRefCell<T: ?Sized> {
     inner: RefCell<T>,
