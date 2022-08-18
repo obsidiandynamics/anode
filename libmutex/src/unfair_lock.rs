@@ -1,6 +1,9 @@
+use std::cell::UnsafeCell;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 use std::sync::{
-    Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Condvar, Mutex,
 };
 use std::time::{Duration};
 use crate::deadline::Deadline;
@@ -16,18 +19,27 @@ struct InternalState {
 pub struct UnfairLock<T: ?Sized> {
     state: Mutex<InternalState>,
     cond: Condvar,
-    data: RwLock<T>,
+    data: UnsafeCell<T>,
 }
 
+unsafe impl<T: ?Sized + Send> Send for UnfairLock<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for UnfairLock<T> {}
+unsafe impl<T: ?Sized + Sync> Sync for LockReadGuard<'_, T> {}
+unsafe impl<T: ?Sized + Sync> Sync for LockWriteGuard<'_, T> {}
+
 pub struct LockReadGuard<'a, T: ?Sized> {
-    data: Option<RwLockReadGuard<'a, T>>,
+    data: NonNull<T>,
     lock: &'a UnfairLock<T>,
+    locked: bool,
+
+    /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
+    __no_send: PhantomData<*const ()>
 }
 
 impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        if let Some(_) = self.data.take() {
+        if self.locked {
             self.lock.read_unlock();
         }
     }
@@ -36,19 +48,18 @@ impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
 impl<'a, T: ?Sized> LockReadGuard<'a, T> {
     #[inline]
     pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
-        self.data = None;
+        self.locked = false;
         self.lock.upgrade()
     }
 
     #[inline]
     pub fn try_upgrade(mut self, duration: Duration) -> UpgradeOutcome<'a, T> {
-        self.data = None;
         match self.lock.try_upgrade(duration) {
-            None => {
-                self.data = Some(self.lock.restore_read_guard());
-                UpgradeOutcome::Unchanged(self)
+            None => UpgradeOutcome::Unchanged(self),
+            Some(guard) => {
+                self.locked = false;
+                UpgradeOutcome::Upgraded(guard)
             }
-            Some(guard) => UpgradeOutcome::Upgraded(guard)
         }
     }
 }
@@ -91,19 +102,21 @@ impl<T: ?Sized> Deref for LockReadGuard<'_, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        self.data.as_ref().unwrap().deref()
+        unsafe { self.data.as_ref() }
     }
 }
 
 pub struct LockWriteGuard<'a, T: ?Sized> {
-    data: Option<RwLockWriteGuard<'a, T>>,
     lock: &'a UnfairLock<T>,
+    locked: bool,
+    /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
+    __no_send: PhantomData<*const ()>
 }
 
 impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        if let Some(_) = self.data.take() {
+        if self.locked {
             self.lock.write_unlock();
         }
     }
@@ -112,7 +125,7 @@ impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
 impl<'a, T: ?Sized> LockWriteGuard<'a, T> {
     #[inline]
     pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
-        self.data = None;
+        self.locked = false;
         self.lock.downgrade()
     }
 }
@@ -122,14 +135,14 @@ impl<T: ?Sized> Deref for LockWriteGuard<'_, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        self.data.as_ref().unwrap().deref()
+        unsafe { &*self.lock.data.get() }
     }
 }
 
 impl<T: ?Sized> DerefMut for LockWriteGuard<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        self.data.as_mut().unwrap().deref_mut()
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 
@@ -139,14 +152,13 @@ impl<T> UnfairLock<T> {
         Self {
             state: Mutex::new(InternalState::default()),
             cond: Condvar::new(),
-            data: RwLock::new(t),
+            data: UnsafeCell::new(t),
         }
     }
 
     #[inline]
     pub fn into_inner(self) -> T {
-        let (data, _) = utils::unpack(self.data.into_inner());
-        data
+        self.data.into_inner()
     }
 }
 
@@ -172,9 +184,14 @@ impl<T: ?Sized> UnfairLock<T> {
         state.readers += 1;
         drop(state);
 
+        let data = unsafe {
+            NonNull::new_unchecked(self.data.get())
+        };
         Some(LockReadGuard {
-            data: Some(utils::remedy(self.data.read())),
+            data,
             lock: self,
+            locked: true,
+            __no_send: PhantomData::default()
         })
     }
 
@@ -206,7 +223,6 @@ impl<T: ?Sized> UnfairLock<T> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut state = utils::remedy(self.state.lock());
         while state.readers != 0 || state.writer {
-            // println!("Remaining {remaining:?}, duration={duration:?}, deadline={deadline:?}");
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
@@ -219,8 +235,9 @@ impl<T: ?Sized> UnfairLock<T> {
         drop(state);
 
         Some(LockWriteGuard {
-            data: Some(utils::remedy(self.data.write())),
             lock: self,
+            locked: true,
+            __no_send: PhantomData::default()
         })
     }
 
@@ -243,9 +260,14 @@ impl<T: ?Sized> UnfairLock<T> {
         state.writer = false;
         drop(state);
         self.cond.notify_all();
+        let data = unsafe {
+            NonNull::new_unchecked(self.data.get())
+        };
         LockReadGuard {
-            data: Some(utils::remedy(self.data.read())),
+            data,
             lock: self,
+            locked: true,
+            __no_send: PhantomData::default()
         }
     }
 
@@ -275,14 +297,10 @@ impl<T: ?Sized> UnfairLock<T> {
         state.writer = true;
         drop(state);
         Some(LockWriteGuard {
-            data: Some(utils::remedy(self.data.write())),
             lock: self,
+            locked: true,
+            __no_send: PhantomData::default()
         })
-    }
-
-    #[inline]
-    fn restore_read_guard(&self) -> RwLockReadGuard<'_, T> {
-        utils::remedy(self.data.read())
     }
 
     /// Returns a mutable reference to the underlying data.
@@ -291,7 +309,7 @@ impl<T: ?Sized> UnfairLock<T> {
     /// take place---the mutable borrow statically guarantees no locks exist.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        utils::remedy(self.data.get_mut())
+        self.data.get_mut()
     }
 }
 

@@ -1,12 +1,12 @@
 use std::sync::{Condvar, LockResult, MutexGuard};
 use std::time::{Duration};
 
-pub fn unpack<T>(result: LockResult<T>) -> (T, bool) {
-    match result {
-        Ok(inner) => (inner, false),
-        Err(error) => (error.into_inner(), true),
-    }
-}
+// pub fn unpack<T>(result: LockResult<T>) -> (T, bool) {
+//     match result {
+//         Ok(inner) => (inner, false),
+//         Err(error) => (error.into_inner(), true),
+//     }
+// }
 
 /// From _Poison_, by _The Prodigy_ (1994).
 /// I got the poison,
