@@ -9,16 +9,19 @@ pub enum Deadline {
 }
 
 impl Deadline {
+    #[inline]
     pub fn lazy_after(duration: Duration) -> Self {
         Self::Uninitialized(duration)
     }
 
+    #[inline]
     pub fn after(duration: Duration) -> Self {
         let mut deadline = Self::lazy_after(duration);
         deadline.ensure_initialized();
         deadline
     }
 
+    #[inline]
     fn saturating_add(instant: Instant, duration: Duration) -> Self {
         match instant.checked_add(duration) {
             None => Deadline::Perpetual,
@@ -26,6 +29,7 @@ impl Deadline {
         }
     }
 
+    #[inline]
     fn ensure_initialized(&mut self) {
         if let Self::Uninitialized(duration) = self {
             if duration == &Duration::MAX {
@@ -38,6 +42,7 @@ impl Deadline {
         }
     }
 
+    #[inline]
     pub fn remaining(&mut self) -> Duration {
         self.ensure_initialized();
 

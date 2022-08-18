@@ -2,7 +2,7 @@
 
 use crate::chalice::{Chalice, ChaliceResultExt};
 use crate::test_utils::SHORT_WAIT;
-use crate::unfair_lock::MaybeUpgraded::Upgraded;
+use crate::unfair_lock::UpgradeOutcome::Upgraded;
 use crate::unfair_lock::UnfairLock;
 use rand::Rng;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};

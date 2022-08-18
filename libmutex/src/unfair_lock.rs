@@ -25,6 +25,7 @@ pub struct LockReadGuard<'a, T: ?Sized> {
 }
 
 impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
+    #[inline]
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.read_unlock();
@@ -33,48 +34,54 @@ impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> LockReadGuard<'a, T> {
+    #[inline]
     pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
         self.data = None;
         self.lock.upgrade()
     }
 
-    pub fn try_upgrade(mut self, duration: Duration) -> MaybeUpgraded<'a, T> {
+    #[inline]
+    pub fn try_upgrade(mut self, duration: Duration) -> UpgradeOutcome<'a, T> {
         self.data = None;
         match self.lock.try_upgrade(duration) {
             None => {
                 self.data = Some(self.lock.restore_read_guard());
-                MaybeUpgraded::Unchanged(self)
+                UpgradeOutcome::Unchanged(self)
             }
-            Some(guard) => MaybeUpgraded::Upgraded(guard)
+            Some(guard) => UpgradeOutcome::Upgraded(guard)
         }
     }
 }
 
-pub enum MaybeUpgraded<'a, T: ?Sized> {
+pub enum UpgradeOutcome<'a, T: ?Sized> {
     Upgraded(LockWriteGuard<'a, T>),
     Unchanged(LockReadGuard<'a, T>)
 }
 
-impl<'a, T: ?Sized> MaybeUpgraded<'a, T> {
+impl<'a, T: ?Sized> UpgradeOutcome<'a, T> {
+    #[inline]
     pub fn is_upgraded(&self) -> bool {
-        matches!(self, MaybeUpgraded::Upgraded(_))
+        matches!(self, UpgradeOutcome::Upgraded(_))
     }
 
+    #[inline]
     pub fn is_unchanged(&self) -> bool {
-        matches!(self, MaybeUpgraded::Unchanged(_))
+        matches!(self, UpgradeOutcome::Unchanged(_))
     }
 
+    #[inline]
     pub fn upgraded(self) -> Option<LockWriteGuard<'a, T>> {
         match self {
-            MaybeUpgraded::Upgraded(guard) => Some(guard),
-            MaybeUpgraded::Unchanged(_) => None
+            UpgradeOutcome::Upgraded(guard) => Some(guard),
+            UpgradeOutcome::Unchanged(_) => None
         }
     }
 
+    #[inline]
     pub fn unchanged(self) -> Option<LockReadGuard<'a, T>> {
         match self {
-            MaybeUpgraded::Upgraded(_) => None,
-            MaybeUpgraded::Unchanged(guard) => Some(guard)
+            UpgradeOutcome::Upgraded(_) => None,
+            UpgradeOutcome::Unchanged(guard) => Some(guard)
         }
     }
 }
@@ -82,6 +89,7 @@ impl<'a, T: ?Sized> MaybeUpgraded<'a, T> {
 impl<T: ?Sized> Deref for LockReadGuard<'_, T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &T {
         self.data.as_ref().unwrap().deref()
     }
@@ -93,6 +101,7 @@ pub struct LockWriteGuard<'a, T: ?Sized> {
 }
 
 impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
+    #[inline]
     fn drop(&mut self) {
         if let Some(_) = self.data.take() {
             self.lock.write_unlock();
@@ -101,6 +110,7 @@ impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> LockWriteGuard<'a, T> {
+    #[inline]
     pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
         self.data = None;
         self.lock.downgrade()
@@ -110,18 +120,21 @@ impl<'a, T: ?Sized> LockWriteGuard<'a, T> {
 impl<T: ?Sized> Deref for LockWriteGuard<'_, T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &T {
         self.data.as_ref().unwrap().deref()
     }
 }
 
 impl<T: ?Sized> DerefMut for LockWriteGuard<'_, T> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut T {
         self.data.as_mut().unwrap().deref_mut()
     }
 }
 
 impl<T> UnfairLock<T> {
+    #[inline]
     pub fn new(t: T) -> Self {
         Self {
             state: Mutex::new(InternalState::default()),
@@ -130,6 +143,7 @@ impl<T> UnfairLock<T> {
         }
     }
 
+    #[inline]
     pub fn into_inner(self) -> T {
         let (data, _) = utils::unpack(self.data.into_inner());
         data
@@ -137,16 +151,18 @@ impl<T> UnfairLock<T> {
 }
 
 impl<T: ?Sized> UnfairLock<T> {
+    #[inline]
     pub fn read(&self) -> LockReadGuard<'_, T> {
         self.try_read(Duration::MAX).unwrap()
     }
 
+    #[inline]
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = self.state.lock().unwrap();
+        let mut state = utils::remedy(self.state.lock());
         while state.writer {
             let (guard, timed_out) =
-                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 return None;
@@ -156,16 +172,17 @@ impl<T: ?Sized> UnfairLock<T> {
         state.readers += 1;
         drop(state);
 
-        let (data, _) = utils::unpack(self.data.read());
         Some(LockReadGuard {
-            data: Some(data),
+            data: Some(utils::remedy(self.data.read())),
             lock: self,
         })
     }
 
+    #[inline]
     fn read_unlock(&self) {
-        let mut state = self.state.lock().unwrap();
-        assert!(state.readers > 0, "readers: {}", state.readers);
+        let mut state = utils::remedy(self.state.lock());
+        debug_assert!(state.readers > 0, "readers: {}", state.readers);
+        debug_assert!(!state.writer);
         state.readers -= 1;
         let readers = state.readers;
         drop(state);
@@ -176,20 +193,22 @@ impl<T: ?Sized> UnfairLock<T> {
         }
     }
 
+    #[inline]
     pub fn write(&self) -> LockWriteGuard<'_, T> {
         self.try_write(Duration::MAX).unwrap()
     }
 
+    #[inline]
     pub fn try_write(
         &self,
         duration: Duration,
     ) -> Option<LockWriteGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = self.state.lock().unwrap();
+        let mut state = utils::remedy(self.state.lock());
         while state.readers != 0 || state.writer {
             // println!("Remaining {remaining:?}, duration={duration:?}, deadline={deadline:?}");
             let (guard, timed_out) =
-                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 return None;
@@ -199,62 +218,71 @@ impl<T: ?Sized> UnfairLock<T> {
         state.writer = true;
         drop(state);
 
-        let (data, _) = utils::unpack(self.data.write());
         Some(LockWriteGuard {
-            data: Some(data),
+            data: Some(utils::remedy(self.data.write())),
             lock: self,
         })
     }
 
+    #[inline]
     fn write_unlock(&self) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = utils::remedy(self.state.lock());
+        debug_assert!(state.readers == 0, "readers: {}", state.readers);
+        debug_assert!(state.writer);
         state.writer = false;
         drop(state);
         self.cond.notify_one();
     }
 
+    #[inline]
     fn downgrade(&self) -> LockReadGuard<'_, T> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = utils::remedy(self.state.lock());
+        debug_assert!(state.readers == 0, "readers: {}", state.readers);
+        debug_assert!(state.writer);
         state.readers = 1;
         state.writer = false;
         drop(state);
         self.cond.notify_all();
-        let (data, _) = utils::unpack(self.data.read());
         LockReadGuard {
-            data: Some(data),
+            data: Some(utils::remedy(self.data.read())),
             lock: self,
         }
     }
 
+    #[inline]
     fn upgrade(&self) -> LockWriteGuard<'_, T> {
         self.try_upgrade(Duration::MAX).unwrap()
     }
 
+    #[inline]
     fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = self.state.lock().unwrap();
+        let mut state = utils::remedy(self.state.lock());
+        debug_assert!(state.readers > 0, "readers: {}", state.readers);
+        debug_assert!(!state.writer);
         while state.readers != 1 {
             let (guard, timed_out) =
-                utils::cond_wait(&self.cond, state, deadline.remaining()).unwrap();
+                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 return None;
             }
             state = guard;
+            debug_assert!(state.readers > 0, "readers: {}", state.readers);
+            debug_assert!(!state.writer);
         }
         state.readers = 0;
         state.writer = true;
         drop(state);
-        let (data, _) = utils::unpack(self.data.write());
         Some(LockWriteGuard {
-            data: Some(data),
+            data: Some(utils::remedy(self.data.write())),
             lock: self,
         })
     }
 
+    #[inline]
     fn restore_read_guard(&self) -> RwLockReadGuard<'_, T> {
-        let (data, _) = utils::unpack(self.data.read());
-        data
+        utils::remedy(self.data.read())
     }
 
     /// Returns a mutable reference to the underlying data.
@@ -263,13 +291,12 @@ impl<T: ?Sized> UnfairLock<T> {
     /// take place---the mutable borrow statically guarantees no locks exist.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        let (data, _) = utils::unpack(self.data.get_mut());
-        data
+        utils::remedy(self.data.get_mut())
     }
 }
 
 #[cfg(test)]
-mod transram_tests;
+mod tr_tests;
 
 #[cfg(test)]
-mod parking_lot_tests;
+mod pl_tests;

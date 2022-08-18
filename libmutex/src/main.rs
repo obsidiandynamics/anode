@@ -3,14 +3,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 use libmutex::unfair_lock::{UnfairLock, LockReadGuard, LockWriteGuard};
-use libmutex::unfair_lock::MaybeUpgraded::{Unchanged, Upgraded};
+use libmutex::unfair_lock::UpgradeOutcome::{Unchanged, Upgraded};
 
 fn main() {
     let num_readers = 8;
     let num_writers = 8;
     let num_downgraders = 8;
     let num_upgraders = 8;
-    let iterations = 1_000;
+    let iterations = 10_000;
 
     let read_timeout = Duration::MAX;//Duration::from_millis(10);
     let write_timeout = Duration::MAX;//Duration::from_millis(10);
