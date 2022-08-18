@@ -1,9 +1,9 @@
 //! A test suite "borrowed" from [`parking_lot`](https://github.com/Amanieu/parking_lot).
 
 use crate::chalice::{Chalice, ChaliceResultExt};
-use crate::test_utils::{FAIRNESS_VARIANTS, SHORT_WAIT};
 use crate::multilock::UpgradeOutcome::Upgraded;
 use crate::multilock::{Fairness, MultiLock};
+use crate::test_utils::{FAIRNESS_VARIANTS, SHORT_WAIT};
 use rand::Rng;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
@@ -29,7 +29,7 @@ fn smoke() {
 #[test]
 fn frob() {
     for fairness in FAIRNESS_VARIANTS {
-        const N: u32 = 10;
+        const N: u32 = 3;
         const M: u32 = 1000;
 
         let r = Arc::new(MultiLock::new((), fairness.into()));
@@ -74,7 +74,7 @@ fn test_rw_arc_no_poison_wr() {
             let _lock = arc2.write();
             panic!();
         })
-            .join();
+        .join();
         let lock = arc.read();
         assert_eq!(*lock, 1);
     }
@@ -91,7 +91,7 @@ fn test_rw_arc_with_chalice() {
             let _val = lock.borrow_mut();
             panic!();
         })
-            .join();
+        .join();
         let lock = arc.read();
         let res = lock.borrow();
         assert!(res.is_err());
@@ -108,7 +108,7 @@ fn test_rw_arc_no_poison_ww() {
             let _lock = arc2.write();
             panic!();
         })
-            .join();
+        .join();
         let lock = arc.write();
         assert_eq!(*lock, 1);
     }
@@ -123,7 +123,7 @@ fn test_rw_arc_no_poison_rr() {
             let _lock = arc2.read();
             panic!();
         })
-            .join();
+        .join();
         let lock = arc.read();
         assert_eq!(*lock, 1);
     }
@@ -138,7 +138,7 @@ fn test_rw_arc_no_poison_rw() {
             let _lock = arc2.read();
             panic!()
         })
-            .join();
+        .join();
         let lock = arc.write();
         assert_eq!(*lock, 1);
     }
@@ -277,7 +277,7 @@ fn test_rw_arc_access_in_unwind() {
                 let _u = Unwinder { i: arc };
                 panic!();
             })
-                .join()
+            .join()
         };
         let lock = arc.read();
         assert_eq!(*lock, 2);
@@ -437,7 +437,7 @@ fn test_get_mut() {
 fn test_rwlockguard_sync() {
     fn sync<T: Sync>(_: T) {}
 
-    let rwlock = MultiLock::new((), Fairness::WriterBiased);
+    let rwlock = MultiLock::new((), Fairness::WriteBiased);
     sync(rwlock.read());
     sync(rwlock.write());
 }
@@ -468,7 +468,7 @@ fn test_rwlock_downgrade() {
 
 #[test]
 fn test_rwlock_debug() {
-    let x = MultiLock::new((), Fairness::WriterBiased);
+    let x = MultiLock::new((), Fairness::WriteBiased);
     assert!(format!("{:?}", x).contains("MultiLock"));
 }
 
@@ -485,13 +485,13 @@ fn test_issue_203() {
     }
 
     thread_local! {
-        static B: Bar = Bar(MultiLock::new((), Fairness::WriterBiased));
+        static B: Bar = Bar(MultiLock::new((), Fairness::WriteBiased));
     }
 
     thread::spawn(|| {
         B.with(|_| ());
 
-        let a = MultiLock::new((), Fairness::WriterBiased);
+        let a = MultiLock::new((), Fairness::WriteBiased);
         let _a = a.read();
     })
     .join()

@@ -1,13 +1,13 @@
 //! A test suite "borrowed" from [TransRAM](https://github.com/obsidiandynamics/transram).
 
-use std::sync::{Arc, Barrier};
+use super::MultiLock;
+use crate::test_utils;
+use crate::test_utils::{CHECK_WAIT, LONG_WAIT, SHORT_WAIT};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;
 use test_utils::FAIRNESS_VARIANTS;
-use crate::test_utils;
-use crate::test_utils::{CHECK_WAIT, LONG_WAIT, SHORT_WAIT};
-use super::MultiLock;
 
 #[test]
 fn read_release_cycle() {

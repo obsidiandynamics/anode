@@ -148,8 +148,8 @@ pub struct MultiLock<T: ?Sized> {
 
 #[derive(Debug, Clone)]
 pub enum Fairness {
-    ReaderBiased,
-    WriterBiased,
+    ReadBiased,
+    WriteBiased,
 }
 
 impl<T> MultiLock<T> {
@@ -179,20 +179,42 @@ impl<T: ?Sized> MultiLock<T> {
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut state = utils::remedy(self.state.lock());
+        let was_writer_pending = state.writer_pending;
         while match self.fairness {
-            Fairness::ReaderBiased => state.writer,
-            Fairness::WriterBiased => state.writer || state.writer_pending,
+            Fairness::ReadBiased => state.writer,
+            Fairness::WriteBiased => state.writer || (was_writer_pending && state.writer_pending),
         } {
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
+                // if self_reader_pending {
+                //     guard.reader_pending = false;
+                //     drop(guard);
+                //     self.cond.notify_all();
+                // }
                 return None;
             }
+            // match &self.fairness {
+            //     Fairness::Balanced => {
+            //         if !guard.reader_pending {
+            //             self_reader_pending = true;
+            //             guard.reader_pending = true;
+            //         }
+            //     },
+            //     Fairness::ReadBiased | Fairness::WriteBiased => ()
+            // }
             state = guard;
         }
+        // if self_reader_pending {
+        //     debug_assert!(state.reader_pending);
+        //     state.reader_pending = false;
+        // }
         state.readers += 1;
         drop(state);
+        // if self_reader_pending {
+        //     self.cond.notify_all();
+        // }
 
         let data = unsafe { NonNull::new_unchecked(self.data.get()) };
         Some(LockReadGuard {
@@ -215,8 +237,8 @@ impl<T: ?Sized> MultiLock<T> {
             self.cond.notify_all();
         } else if readers == 0 {
             match self.fairness {
-                Fairness::ReaderBiased => self.cond.notify_one(),
-                Fairness::WriterBiased => self.cond.notify_all()
+                Fairness::ReadBiased => self.cond.notify_one(),
+                Fairness::WriteBiased => self.cond.notify_all()
             }
         }
     }
@@ -231,7 +253,9 @@ impl<T: ?Sized> MultiLock<T> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
         let mut state = utils::remedy(self.state.lock());
-        while state.readers != 0 || state.writer {
+        while match self.fairness {
+            Fairness::ReadBiased | Fairness::WriteBiased => state.readers != 0 || state.writer,
+        } {
             let (mut guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
@@ -244,11 +268,14 @@ impl<T: ?Sized> MultiLock<T> {
                 return None;
             }
 
-            if let Fairness::WriterBiased = &self.fairness {
-                if !guard.writer_pending {
-                    self_writer_pending = true;
-                    guard.writer_pending = true;
-                }
+            match &self.fairness {
+                Fairness::WriteBiased => {
+                    if !guard.writer_pending {
+                        self_writer_pending = true;
+                        guard.writer_pending = true;
+                    }
+                },
+                Fairness::ReadBiased => ()
             }
             state = guard;
         }
@@ -258,9 +285,9 @@ impl<T: ?Sized> MultiLock<T> {
         }
         state.writer = true;
         drop(state);
-        if self_writer_pending {
-            self.cond.notify_all();
-        }
+        // if self_writer_pending {    // probably not needed for WriteBiased
+        //     self.cond.notify_all();
+        // }
 
         Some(LockWriteGuard {
             lock: self,
@@ -277,8 +304,8 @@ impl<T: ?Sized> MultiLock<T> {
         state.writer = false;
         drop(state);
         match self.fairness {
-            Fairness::ReaderBiased => self.cond.notify_one(),
-            Fairness::WriterBiased => self.cond.notify_all()
+            Fairness::ReadBiased => self.cond.notify_one(),
+            Fairness::WriteBiased => self.cond.notify_all()
         }
     }
 
@@ -324,11 +351,14 @@ impl<T: ?Sized> MultiLock<T> {
                 }
                 return None;
             }
-            if let Fairness::WriterBiased = &self.fairness {
-                if !guard.writer_pending {
-                    self_writer_pending = true;
-                    guard.writer_pending = true;
-                }
+            match &self.fairness {
+                Fairness::WriteBiased => {
+                    if !guard.writer_pending {
+                        self_writer_pending = true;
+                        guard.writer_pending = true;
+                    }
+                },
+                Fairness::ReadBiased => ()
             }
             state = guard;
             debug_assert!(state.readers > 0, "readers: {}", state.readers);
@@ -341,9 +371,9 @@ impl<T: ?Sized> MultiLock<T> {
         state.readers = 0;
         state.writer = true;
         drop(state);
-        if self_writer_pending {
-            self.cond.notify_all();
-        }
+        // if self_writer_pending { // probably not needed for WriteBiased
+        //     self.cond.notify_all();
+        // }
         Some(LockWriteGuard {
             lock: self,
             locked: true,

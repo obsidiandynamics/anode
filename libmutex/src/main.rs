@@ -20,7 +20,7 @@ fn main() {
     let debug_exits = false;
     let sleep_time = Duration::from_millis(0);
 
-    let protected = Arc::new(MultiLock::new(0, Fairness::WriterBiased));
+    let protected = Arc::new(MultiLock::new(0, Fairness::WriteBiased));
 
     let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
     let upgrade_timeouts = Arc::new(AtomicU64::default());

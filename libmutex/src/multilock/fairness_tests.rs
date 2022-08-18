@@ -1,11 +1,10 @@
-use std::sync::Arc;
 use test_utils::SHORT_WAIT;
 use crate::multilock::{Fairness, MultiLock};
 use crate::test_utils;
 
 #[test]
 fn timeout_in_write_unblocks_readers() {
-    let lock = MultiLock::new(0, Fairness::WriterBiased);
+    let lock = MultiLock::new(0, Fairness::WriteBiased);
     let guard_1 = lock.read();
     let guard_2 = lock.read();
 
@@ -23,7 +22,7 @@ fn timeout_in_write_unblocks_readers() {
 
 #[test]
 fn timeout_in_upgrade_unblocks_readers() {
-    let lock = MultiLock::new(0, Fairness::WriterBiased);
+    let lock = MultiLock::new(0, Fairness::WriteBiased);
     let guard_1 = lock.read();
     let guard_2 = lock.read();
 
@@ -38,9 +37,9 @@ fn timeout_in_upgrade_unblocks_readers() {
     drop(guard_4);
 }
 
-#[test]
-fn await_timeout_in_pending_writer() {
-    let lock = Arc::new(MultiLock::new(0, Fairness::WriterBiased));
-    let guard_1 = lock.read();
-
-}
+// #[test]
+// fn await_timeout_in_pending_writer() {
+//     let lock = Arc::new(MultiLock::new(0, Fairness::WriteBiased));
+//     let guard_1 = lock.read();
+//
+// }
