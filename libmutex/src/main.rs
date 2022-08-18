@@ -2,7 +2,7 @@ use std::sync::{Arc};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::multilock::{MultiLock, LockReadGuard, LockWriteGuard};
+use libmutex::multilock::{MultiLock, LockReadGuard, LockWriteGuard, Fairness};
 use libmutex::multilock::UpgradeOutcome::{Unchanged, Upgraded};
 
 fn main() {
@@ -20,7 +20,7 @@ fn main() {
     let debug_exits = false;
     let sleep_time = Duration::from_millis(0);
 
-    let protected = Arc::new(MultiLock::fair(0));
+    let protected = Arc::new(MultiLock::new(0, Fairness::WriterBiased));
 
     let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
     let upgrade_timeouts = Arc::new(AtomicU64::default());

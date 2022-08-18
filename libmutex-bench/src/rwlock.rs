@@ -17,7 +17,7 @@ use std::{
     thread,
     time::Duration,
 };
-use libmutex::multilock::MultiLock;
+use libmutex::multilock::{Fairness, MultiLock};
 
 trait RwLock<T> {
     fn new(v: T) -> Self;
@@ -51,21 +51,42 @@ impl<T> RwLock<T> for std::sync::RwLock<T> {
     }
 }
 
-impl<T> RwLock<T> for MultiLock<T> {
+struct WriterBiasedLock<T>(MultiLock<T>);
+struct ReaderBiasedLock<T>(MultiLock<T>);
+
+impl<T> RwLock<T> for WriterBiasedLock<T> {
     fn new(v: T) -> Self {
-        Self::fair(v)
+        Self(MultiLock::new(v, Fairness::WriterBiased))
     }
 
     fn read<F, R>(&self, f: F) -> R where F: FnOnce(&T) -> R {
-        f(&*self.read())
+        f(&*self.0.read())
     }
 
     fn write<F, R>(&self, f: F) -> R where F: FnOnce(&mut T) -> R {
-        f(&mut *self.write())
+        f(&mut *self.0.write())
     }
 
     fn name() -> &'static str {
-        "libmutex::multilock::MultiLock"
+        "libmutex::multilock::MultiLock+WriterBiased"
+    }
+}
+
+impl<T> RwLock<T> for ReaderBiasedLock<T> {
+    fn new(v: T) -> Self {
+        Self(MultiLock::new(v, Fairness::ReaderBiased))
+    }
+
+    fn read<F, R>(&self, f: F) -> R where F: FnOnce(&T) -> R {
+        f(&*self.0.read())
+    }
+
+    fn write<F, R>(&self, f: F) -> R where F: FnOnce(&mut T) -> R {
+        f(&mut *self.0.write())
+    }
+
+    fn name() -> &'static str {
+        "libmutex::multilock::MultiLock+ReaderBiased"
     }
 }
 
@@ -198,7 +219,7 @@ fn run_benchmark_iterations<M: RwLock<f64> + Send + Sync + 'static>(
     let total_writers = writers.iter().fold(0f64, |a, b| a + *b as f64) / test_iterations as f64;
     let total_readers = readers.iter().fold(0f64, |a, b| a + *b as f64) / test_iterations as f64;
     println!(
-        "{:33} - [write] {:10.3} kHz          [read] {:10.3} kHz",
+        "{:43} - [write] {:10.3} kHz          [read] {:10.3} kHz",
         M::name(),
         total_writers as f64 / seconds_per_test as f64 / 1000.0,
         total_readers as f64 / seconds_per_test as f64 / 1000.0
@@ -235,7 +256,16 @@ fn run_all(
     }
     *first = false;
 
-    run_benchmark_iterations::<libmutex::multilock::MultiLock<f64>>(
+    run_benchmark_iterations::<WriterBiasedLock<f64>>(
+        num_writer_threads,
+        num_reader_threads,
+        work_per_critical_section,
+        work_between_critical_sections,
+        seconds_per_test,
+        test_iterations,
+    );
+
+    run_benchmark_iterations::<ReaderBiasedLock<f64>>(
         num_writer_threads,
         num_reader_threads,
         work_per_critical_section,

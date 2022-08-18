@@ -12,7 +12,7 @@ pub const SHORT_WAIT: Duration = Duration::from_micros(1);
 pub const LONG_WAIT: Duration = Duration::from_secs(10);
 pub const CHECK_WAIT: Duration = Duration::from_millis(5);
 
-pub const FAIRNESS_VARIANTS: [FairnessVariant; 2] = [FairnessVariant(Fairness::ReaderBiased), FairnessVariant(Fairness::Balanced)];
+pub const FAIRNESS_VARIANTS: [FairnessVariant; 2] = [FairnessVariant(Fairness::ReaderBiased), FairnessVariant(Fairness::WriterBiased)];
 
 pub struct FairnessVariant(Fairness);
 

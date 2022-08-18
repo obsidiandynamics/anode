@@ -149,15 +149,10 @@ pub struct MultiLock<T: ?Sized> {
 #[derive(Debug, Clone)]
 pub enum Fairness {
     ReaderBiased,
-    Balanced,
+    WriterBiased,
 }
 
 impl<T> MultiLock<T> {
-    #[inline]
-    pub fn fair(t: T) -> Self {
-        Self::new(t, Fairness::Balanced)
-    }
-
     #[inline]
     pub fn new(t: T, fairness: Fairness) -> Self {
         Self {
@@ -186,7 +181,7 @@ impl<T: ?Sized> MultiLock<T> {
         let mut state = utils::remedy(self.state.lock());
         while match self.fairness {
             Fairness::ReaderBiased => state.writer,
-            Fairness::Balanced => state.writer || state.writer_pending,
+            Fairness::WriterBiased => state.writer || state.writer_pending,
         } {
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
@@ -221,7 +216,7 @@ impl<T: ?Sized> MultiLock<T> {
         } else if readers == 0 {
             match self.fairness {
                 Fairness::ReaderBiased => self.cond.notify_one(),
-                Fairness::Balanced => self.cond.notify_all()
+                Fairness::WriterBiased => self.cond.notify_all()
             }
         }
     }
@@ -249,7 +244,7 @@ impl<T: ?Sized> MultiLock<T> {
                 return None;
             }
 
-            if let Fairness::Balanced = &self.fairness {
+            if let Fairness::WriterBiased = &self.fairness {
                 if !guard.writer_pending {
                     self_writer_pending = true;
                     guard.writer_pending = true;
@@ -283,7 +278,7 @@ impl<T: ?Sized> MultiLock<T> {
         drop(state);
         match self.fairness {
             Fairness::ReaderBiased => self.cond.notify_one(),
-            Fairness::Balanced => self.cond.notify_all()
+            Fairness::WriterBiased => self.cond.notify_all()
         }
     }
 
@@ -329,7 +324,7 @@ impl<T: ?Sized> MultiLock<T> {
                 }
                 return None;
             }
-            if let Fairness::Balanced = &self.fairness {
+            if let Fairness::WriterBiased = &self.fairness {
                 if !guard.writer_pending {
                     self_writer_pending = true;
                     guard.writer_pending = true;
@@ -371,3 +366,6 @@ mod tr_tests;
 
 #[cfg(test)]
 mod pl_tests;
+
+#[cfg(test)]
+mod fairness_tests;

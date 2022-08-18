@@ -437,7 +437,7 @@ fn test_get_mut() {
 fn test_rwlockguard_sync() {
     fn sync<T: Sync>(_: T) {}
 
-    let rwlock = MultiLock::new((), Fairness::Balanced);
+    let rwlock = MultiLock::new((), Fairness::WriterBiased);
     sync(rwlock.read());
     sync(rwlock.write());
 }
@@ -468,7 +468,7 @@ fn test_rwlock_downgrade() {
 
 #[test]
 fn test_rwlock_debug() {
-    let x = MultiLock::new((), Fairness::Balanced);
+    let x = MultiLock::new((), Fairness::WriterBiased);
     assert!(format!("{:?}", x).contains("MultiLock"));
 }
 
@@ -485,13 +485,13 @@ fn test_issue_203() {
     }
 
     thread_local! {
-        static B: Bar = Bar(MultiLock::new((), Fairness::Balanced));
+        static B: Bar = Bar(MultiLock::new((), Fairness::WriterBiased));
     }
 
     thread::spawn(|| {
         B.with(|_| ());
 
-        let a = MultiLock::new((), Fairness::Balanced);
+        let a = MultiLock::new((), Fairness::WriterBiased);
         let _a = a.read();
     })
     .join()
