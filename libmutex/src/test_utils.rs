@@ -5,11 +5,23 @@ use std::sync::{Arc, Barrier};
 use std::{fmt, thread};
 use std::thread::JoinHandle;
 use std::time::Duration;
+use crate::multilock::Fairness;
 
 // Constants used for waiting in tests.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
 pub const LONG_WAIT: Duration = Duration::from_secs(10);
 pub const CHECK_WAIT: Duration = Duration::from_millis(5);
+
+pub const FAIRNESS_VARIANTS: [FairnessVariant; 2] = [FairnessVariant(Fairness::ReaderBiased), FairnessVariant(Fairness::Balanced)];
+
+pub struct FairnessVariant(Fairness);
+
+impl From<FairnessVariant> for Fairness {
+    fn from(fv: FairnessVariant) -> Self {
+        println!("test running with fairness {:?}", fv.0);
+        fv.0
+    }
+}
 
 pub struct UnwindableRefCell<T: ?Sized> {
     inner: RefCell<T>,

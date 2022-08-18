@@ -2,8 +2,8 @@ use std::sync::{Arc};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::unfair_lock::{UnfairLock, LockReadGuard, LockWriteGuard};
-use libmutex::unfair_lock::UpgradeOutcome::{Unchanged, Upgraded};
+use libmutex::multilock::{MultiLock, LockReadGuard, LockWriteGuard};
+use libmutex::multilock::UpgradeOutcome::{Unchanged, Upgraded};
 
 fn main() {
     let num_readers = 8;
@@ -20,7 +20,7 @@ fn main() {
     let debug_exits = false;
     let sleep_time = Duration::from_millis(0);
 
-    let protected = Arc::new(UnfairLock::new(0));
+    let protected = Arc::new(MultiLock::fair(0));
 
     let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
     let upgrade_timeouts = Arc::new(AtomicU64::default());
@@ -134,7 +134,7 @@ fn main() {
     println!("upgrade timeouts: {upgrade_timeouts:?}");
 }
 
-fn read_eventually<T>(lock: &UnfairLock<T>, duration: Duration) -> LockReadGuard<T> {
+fn read_eventually<T>(lock: &MultiLock<T>, duration: Duration) -> LockReadGuard<T> {
     let mut val = None;
     while val.is_none() {
         val = lock.try_read(duration);
@@ -142,7 +142,7 @@ fn read_eventually<T>(lock: &UnfairLock<T>, duration: Duration) -> LockReadGuard
     val.unwrap()
 }
 
-fn write_eventually<T>(lock: &UnfairLock<T>, duration: Duration) -> LockWriteGuard<T> {
+fn write_eventually<T>(lock: &MultiLock<T>, duration: Duration) -> LockWriteGuard<T> {
     let mut val = None;
     while val.is_none() {
         val = lock.try_write(duration);

@@ -1,4 +1,4 @@
-pub mod unfair_lock;
+pub mod multilock;
 pub mod chalice;
 pub mod deadline;
 mod utils;

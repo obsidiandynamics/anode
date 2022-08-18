@@ -17,7 +17,7 @@ use std::{
     thread,
     time::Duration,
 };
-use libmutex::unfair_lock::UnfairLock;
+use libmutex::multilock::MultiLock;
 
 trait RwLock<T> {
     fn new(v: T) -> Self;
@@ -51,9 +51,9 @@ impl<T> RwLock<T> for std::sync::RwLock<T> {
     }
 }
 
-impl<T> RwLock<T> for UnfairLock<T> {
+impl<T> RwLock<T> for MultiLock<T> {
     fn new(v: T) -> Self {
-        Self::new(v)
+        Self::fair(v)
     }
 
     fn read<F, R>(&self, f: F) -> R where F: FnOnce(&T) -> R {
@@ -65,7 +65,7 @@ impl<T> RwLock<T> for UnfairLock<T> {
     }
 
     fn name() -> &'static str {
-        "libmutex::unfair_lock::UnfairLock"
+        "libmutex::multilock::MultiLock"
     }
 }
 
@@ -235,7 +235,7 @@ fn run_all(
     }
     *first = false;
 
-    run_benchmark_iterations::<libmutex::unfair_lock::UnfairLock<f64>>(
+    run_benchmark_iterations::<libmutex::multilock::MultiLock<f64>>(
         num_writer_threads,
         num_reader_threads,
         work_per_critical_section,
