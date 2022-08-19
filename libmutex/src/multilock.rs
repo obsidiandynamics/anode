@@ -131,11 +131,21 @@ impl<T: ?Sized> DerefMut for LockWriteGuard<'_, T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct InternalState {
     readers: u32,
     writer: bool,
     writer_pending: bool,
+    next_ticket: u64,
+    serviced_tickets: u64
+}
+
+impl InternalState {
+    fn take_ticket(&mut self) -> u64 {
+        let next = self.next_ticket;
+        self.next_ticket = next + 1;
+        next
+    }
 }
 
 #[derive(Debug)]
@@ -150,6 +160,7 @@ pub struct MultiLock<T: ?Sized> {
 pub enum Fairness {
     ReadBiased,
     WriteBiased,
+    ArrivalOrdered,
 }
 
 impl<T> MultiLock<T> {
@@ -157,7 +168,13 @@ impl<T> MultiLock<T> {
     pub fn new(t: T, fairness: Fairness) -> Self {
         Self {
             fairness,
-            state: Mutex::new(InternalState::default()),
+            state: Mutex::new(InternalState {
+                readers: 0,
+                writer: false,
+                writer_pending: false,
+                next_ticket: 1,
+                serviced_tickets: 0
+            }),
             cond: Condvar::new(),
             data: UnsafeCell::new(t),
         }
@@ -179,42 +196,45 @@ impl<T: ?Sized> MultiLock<T> {
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut state = utils::remedy(self.state.lock());
+        let ticket = state.take_ticket();
         let was_writer_pending = state.writer_pending;
         while match self.fairness {
             Fairness::ReadBiased => state.writer,
             Fairness::WriteBiased => state.writer || (was_writer_pending && state.writer_pending),
+            Fairness::ArrivalOrdered => state.writer || state.serviced_tickets < ticket - 1,
         } {
-            let (guard, timed_out) =
+            let (mut guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
-                // if self_reader_pending {
-                //     guard.reader_pending = false;
-                //     drop(guard);
-                //     self.cond.notify_all();
-                // }
+                match &self.fairness {
+                    Fairness::ArrivalOrdered => {
+                        guard.serviced_tickets += 1;
+                        // println!("read timed out, serviced {}", guard.serviced_tickets);
+                        drop(guard);
+                        self.cond.notify_all();
+                    },
+                    Fairness::ReadBiased | Fairness::WriteBiased => ()
+                }
                 return None;
             }
-            // match &self.fairness {
-            //     Fairness::Balanced => {
-            //         if !guard.reader_pending {
-            //             self_reader_pending = true;
-            //             guard.reader_pending = true;
-            //         }
-            //     },
-            //     Fairness::ReadBiased | Fairness::WriteBiased => ()
-            // }
             state = guard;
         }
-        // if self_reader_pending {
-        //     debug_assert!(state.reader_pending);
-        //     state.reader_pending = false;
-        // }
+        match &self.fairness {
+            Fairness::ArrivalOrdered => {
+                state.serviced_tickets += 1;
+            },
+            Fairness::ReadBiased | Fairness::WriteBiased => ()
+        }
         state.readers += 1;
         drop(state);
-        // if self_reader_pending {
-        //     self.cond.notify_all();
-        // }
+
+        match &self.fairness {
+            Fairness::ArrivalOrdered => {
+                self.cond.notify_all();
+            },
+            Fairness::ReadBiased | Fairness::WriteBiased => ()
+        }
 
         let data = unsafe { NonNull::new_unchecked(self.data.get()) };
         Some(LockReadGuard {
@@ -238,7 +258,7 @@ impl<T: ?Sized> MultiLock<T> {
         } else if readers == 0 {
             match self.fairness {
                 Fairness::ReadBiased => self.cond.notify_one(),
-                Fairness::WriteBiased => self.cond.notify_all()
+                Fairness::WriteBiased | Fairness::ArrivalOrdered => self.cond.notify_all()
             }
         }
     }
@@ -253,17 +273,31 @@ impl<T: ?Sized> MultiLock<T> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
         let mut state = utils::remedy(self.state.lock());
+        let ticket = state.take_ticket();
+        // println!("waiting on {ticket}");
         while match self.fairness {
             Fairness::ReadBiased | Fairness::WriteBiased => state.readers != 0 || state.writer,
+            Fairness::ArrivalOrdered => state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1,
         } {
             let (mut guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
-                if self_writer_pending {
-                    guard.writer_pending = false;
-                    drop(guard);
-                    self.cond.notify_all();
+                match &self.fairness {
+                    Fairness::ArrivalOrdered => {
+                        guard.serviced_tickets += 1;
+                        // println!("write timed out {ticket}, serviced {}", guard.serviced_tickets);
+                        drop(guard);
+                        self.cond.notify_all();
+                    }
+                    Fairness::WriteBiased => {
+                        if self_writer_pending {
+                            guard.writer_pending = false;
+                            drop(guard);
+                            self.cond.notify_all();
+                        }
+                    }
+                    Fairness::ReadBiased => ()
                 }
                 return None;
             }
@@ -275,19 +309,31 @@ impl<T: ?Sized> MultiLock<T> {
                         guard.writer_pending = true;
                     }
                 },
-                Fairness::ReadBiased => ()
+                Fairness::ReadBiased | Fairness::ArrivalOrdered => ()
             }
             state = guard;
         }
+
         if self_writer_pending {
             debug_assert!(state.writer_pending);
             state.writer_pending = false;
         }
+        match &self.fairness {
+            Fairness::ArrivalOrdered => {
+                state.serviced_tickets += 1;
+                // println!("write acquired {ticket}, servicedx {}", state.serviced_tickets);
+            },
+            Fairness::ReadBiased | Fairness::WriteBiased => ()
+        }
         state.writer = true;
         drop(state);
-        // if self_writer_pending {    // probably not needed for WriteBiased
-        //     self.cond.notify_all();
-        // }
+
+        match &self.fairness {
+            Fairness::ArrivalOrdered => {
+                self.cond.notify_all();
+            },
+            Fairness::ReadBiased | Fairness::WriteBiased => ()
+        }
 
         Some(LockWriteGuard {
             lock: self,
@@ -305,7 +351,7 @@ impl<T: ?Sized> MultiLock<T> {
         drop(state);
         match self.fairness {
             Fairness::ReadBiased => self.cond.notify_one(),
-            Fairness::WriteBiased => self.cond.notify_all()
+            Fairness::WriteBiased | Fairness::ArrivalOrdered => self.cond.notify_all()
         }
     }
 
@@ -344,21 +390,27 @@ impl<T: ?Sized> MultiLock<T> {
                 utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
-                if self_writer_pending {
-                    guard.writer_pending = false;
-                    drop(guard);
-                    self.cond.notify_all();
+                match &self.fairness {
+                    Fairness::WriteBiased => {
+                        if self_writer_pending {
+                            guard.writer_pending = false;
+                            drop(guard);
+                            self.cond.notify_all();
+                        }
+                    },
+                    Fairness::ReadBiased | Fairness::ArrivalOrdered => (),
                 }
+
                 return None;
             }
             match &self.fairness {
-                Fairness::WriteBiased => {
+                Fairness::WriteBiased  => {
                     if !guard.writer_pending {
                         self_writer_pending = true;
                         guard.writer_pending = true;
                     }
                 },
-                Fairness::ReadBiased => ()
+                Fairness::ReadBiased | Fairness::ArrivalOrdered => ()
             }
             state = guard;
             debug_assert!(state.readers > 0, "readers: {}", state.readers);
@@ -371,9 +423,7 @@ impl<T: ?Sized> MultiLock<T> {
         state.readers = 0;
         state.writer = true;
         drop(state);
-        // if self_writer_pending { // probably not needed for WriteBiased
-        //     self.cond.notify_all();
-        // }
+
         Some(LockWriteGuard {
             lock: self,
             locked: true,

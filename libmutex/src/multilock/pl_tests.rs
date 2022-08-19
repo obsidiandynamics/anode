@@ -25,11 +25,12 @@ fn smoke() {
     }
 }
 
-/// Enhanced over the original test to exercise both the read/write and the try_read/try_write paths.
+/// Enhanced over the original test to exercise both the read/write and the try_read/try_write paths,
+/// as well as downgrade and try_upgrade.
 #[test]
 fn frob() {
     for fairness in FAIRNESS_VARIANTS {
-        const N: u32 = 3;
+        const N: u32 = 10;
         const M: u32 = 1000;
 
         let r = Arc::new(MultiLock::new((), fairness.into()));
@@ -42,7 +43,7 @@ fn frob() {
                 let mut rng = rand::thread_rng();
                 for _ in 0..M {
                     if rng.gen_bool(1.0 / N as f64) {
-                        // println!("trying write");
+                        // println!("{t} trying write");
                         drop(r.write());
                     } else {
                         // println!("trying read");
@@ -50,11 +51,31 @@ fn frob() {
                     }
 
                     if rng.gen_bool(1.0 / N as f64) {
-                        // println!("trying write");
+                        // println!("{t} trying write");
                         drop(r.try_write(SHORT_WAIT));
                     } else {
                         // println!("trying read");
                         drop(r.try_read(SHORT_WAIT));
+                    }
+
+                    if rng.gen_bool(1.0 / N as f64) {
+                        // println!("{t} trying write");
+                        drop(r.try_write(Duration::ZERO));
+                    } else {
+                        // println!("trying read");
+                        drop(r.try_read(Duration::ZERO));
+                    }
+
+                    if rng.gen_bool(1.0 / N as f64) {
+                        // println!("{t} trying write");
+                        drop(r.write().downgrade());
+                    } else {
+                        // println!("trying read");
+                        if rng.gen_bool(0.5) {
+                            drop(r.read().try_upgrade(SHORT_WAIT));
+                        } else {
+                            drop(r.read().try_upgrade(Duration::ZERO));
+                        }
                     }
                 }
                 drop(tx);

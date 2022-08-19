@@ -322,7 +322,7 @@ fn competing_read_acquire_and_upgrade_while_read_locked() {
         let guard_1 = lock.read();
         println!("main: read-acquired");
 
-        let read_acquired = Arc::new(Barrier::new(2));
+        let read_acquired = Arc::new(Barrier::new(3));
         let t_2_upgraded = Arc::new(Barrier::new(2));
         let t_2_begin_downgrade = Arc::new(Barrier::new(2));
         let t_2_downgraded = Arc::new(Barrier::new(2));
@@ -362,7 +362,9 @@ fn competing_read_acquire_and_upgrade_while_read_locked() {
 
         let t_3 = {
             let lock = lock.clone();
+            let read_acquired = read_acquired.clone();
             thread::spawn(move || {
+                read_acquired.wait(); // wait for t_2 to read acquire (needed for ArrivalOrdered)
                 let guard_3_res = lock.try_write(LONG_WAIT);
                 assert!(guard_3_res.is_some());
                 println!("t_3: write-acquired");
