@@ -15,9 +15,43 @@ pub struct Completed<'a, T> {
     guard: MutexGuard<'a, Option<T>>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Outcome<T> {
+    Abort,
+    Success(T)
+}
+
+impl<T> Outcome<T> {
+    #[inline]
+    pub fn is_abort(&self) -> bool {
+        matches!(self, Outcome::Abort)
+    }
+
+    #[inline]
+    pub fn is_success(&self) -> bool {
+        matches!(self, Outcome::Abort)
+    }
+
+    #[inline]
+    pub fn into_option(self) -> Option<T> {
+        match self {
+            Outcome::Abort => None,
+            Outcome::Success(val) => Some(val)
+        }
+    }
+}
+
+impl<T> Default for Outcome<T> {
+    #[inline]
+    fn default() -> Self {
+        Outcome::Abort
+    }
+}
+
 impl<T> Deref for Completed<'_, T> {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.guard.as_ref().unwrap()
     }
@@ -32,11 +66,20 @@ impl<T> Completable<T> {
         }
     }
 
+    /// Completes this instance in exclusive mode, wherein the given closure is
+    /// atomically invoked if and only if the instance is incomplete. No other
+    /// thread may succeed in completing this instance in the meantime.
+    ///
+    /// This method is used when `f` represents an expensive computation, the result of
+    /// which should not be discarded. Conversely, if this instance is already
+    /// complete, `f` should not be attempted.
+    ///
+    /// Returns `true` if and only if `f` was invoked.
     #[inline]
-    pub fn complete(&self, val: T) -> bool {
+    pub fn complete_exclusive(&self, f: impl FnOnce() -> T) -> bool {
         let mut data = utils::remedy(self.data.lock());
         if data.is_none() {
-            *data = Some(val);
+            *data = Some(f());
             drop(data);
             self.cond.notify_all();
             true
@@ -45,33 +88,42 @@ impl<T> Completable<T> {
         }
     }
 
+    /// Completes this instance, assigning `val` if the instance is incomplete. Otherwise,
+    /// the existing completed value is preserved.
+    ///
+    /// Returns `true` if and only if `val` was assigned.
+    #[inline]
+    pub fn complete(&self, val: T) -> bool {
+        self.complete_exclusive(|| val)
+    }
+
     #[inline]
     pub fn is_complete(&self) -> bool {
         utils::remedy(self.data.lock()).is_some()
     }
 
     #[inline]
-    pub fn wait(&self) -> Completed<T> {
+    pub fn get(&self) -> Completed<T> {
         Completed {
-            guard: self.__try_wait(Duration::MAX),
+            guard: self.__try_get(Duration::MAX),
         }
     }
 
     #[inline]
-    pub fn get<'a>(&'a self) -> impl Deref<Target = Option<T>> + 'a {
-        self.__try_wait(Duration::ZERO)
+    pub fn peek<'a>(&'a self) -> impl Deref<Target = Option<T>> + 'a {
+        self.__try_get(Duration::ZERO)
     }
 
     #[inline]
-    pub fn try_wait<'a>(&'a self, duration: Duration) -> impl Deref<Target = Option<T>> + 'a {
-        self.__try_wait(duration)
+    pub fn try_get<'a>(&'a self, duration: Duration) -> impl Deref<Target = Option<T>> + 'a {
+        self.__try_get(duration)
     }
 
-    /// [`__try_wait`] is never exposed directly to avoid coupling the caller to the
-    /// [`MutexGuard`] type, which might change in future implementations. Instead, the mutex guard is
-    /// publicly exposed as a [`Deref`] trait.
+    /// [`__try_get`] is never exposed directly to avoid coupling the caller to the
+    /// [`MutexGuard`] type, which might change in future implementations. Instead, the return
+    /// value is publicly exposed as a [`Deref`] trait.
     #[inline]
-    fn __try_wait(&self, duration: Duration) -> MutexGuard<Option<T>> {
+    fn __try_get(&self, duration: Duration) -> MutexGuard<Option<T>> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut data = utils::remedy(self.data.lock());
         while data.is_none() {

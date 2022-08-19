@@ -10,14 +10,14 @@ fn complete_later() {
 
     assert!(comp.complete(42));
     assert!(comp.is_complete());
-    assert_eq!(42, *comp.wait());
-    assert_eq!(Some(42), *comp.get());
-    assert_eq!(Some(42), *comp.try_wait(SHORT_WAIT));
+    assert_eq!(42, *comp.get());
+    assert_eq!(Some(42), *comp.peek());
+    assert_eq!(Some(42), *comp.try_get(SHORT_WAIT));
 
     // assigning a different value should not overwrite the existing
     assert!(!comp.complete(69));
     assert!(comp.is_complete());
-    assert_eq!(Some(42), *comp.get());
+    assert_eq!(Some(42), *comp.peek());
 
     assert_eq!(Some(42), comp.into_inner())
 }
@@ -26,14 +26,14 @@ fn complete_later() {
 fn complete_at_init() {
     let comp = Completable::new(42);
     assert!(comp.is_complete());
-    assert_eq!(42, *comp.wait());
-    assert_eq!(Some(42), *comp.get());
-    assert_eq!(Some(42), *comp.try_wait(SHORT_WAIT));
+    assert_eq!(42, *comp.get());
+    assert_eq!(Some(42), *comp.peek());
+    assert_eq!(Some(42), *comp.try_get(SHORT_WAIT));
 
     // assigning a different value should not overwrite the existing
     assert!(!comp.complete(69));
     assert!(comp.is_complete());
-    assert_eq!(Some(42), *comp.get());
+    assert_eq!(Some(42), *comp.peek());
 
     assert_eq!(Some(42), comp.into_inner())
 }
@@ -50,17 +50,38 @@ fn await_complete() {
             t_2_should_complete.wait();
             assert!(comp.complete(42));
             assert!(!comp.complete(69));
-            assert_eq!(42, *comp.wait());
+            assert_eq!(42, *comp.get());
         })
     };
 
-    assert_eq!(None, *comp.try_wait(SHORT_WAIT));
+    assert_eq!(None, *comp.try_get(SHORT_WAIT));
     t_2_should_complete.wait();
 
-    assert_eq!(42, *comp.wait());
+    assert_eq!(42, *comp.get());
     assert!(comp.is_complete());
-    assert_eq!(Some(42), *comp.get());
+    assert_eq!(Some(42), *comp.peek());
     t_2.join().unwrap();
+}
+
+#[test]
+fn complete_exclusive() {
+    let comp = Completable::default();
+
+    let mut invoked = false;
+    comp.complete_exclusive(|| {
+        invoked = true;
+        42
+    });
+    assert_eq!(42, *comp.get());
+    assert!(invoked);
+
+    invoked = false;
+    comp.complete_exclusive(|| {
+        invoked = true;
+        69
+    });
+    assert_eq!(42, *comp.get());
+    assert!(!invoked);
 }
 
 #[test]
@@ -68,7 +89,7 @@ fn completable_is_sync() {
     fn sync<T: Sync>(_: T) {}
 
     let comp = Completable::new(());
+    sync(comp.peek());
     sync(comp.get());
-    sync(comp.wait());
     sync(comp);
 }

@@ -141,6 +141,7 @@ struct InternalState {
 }
 
 impl InternalState {
+    #[inline]
     fn take_ticket(&mut self) -> u64 {
         let next = self.next_ticket;
         self.next_ticket = next + 1;
@@ -320,7 +321,7 @@ impl<T: ?Sized> MultiLock<T> {
         match &self.fairness {
             Fairness::ArrivalOrdered => {
                 state.serviced_tickets += 1;
-                // println!("write acquired {ticket}, servicedx {}", state.serviced_tickets);
+                // println!("write acquired {ticket}, serviced {}", state.serviced_tickets);
             },
             Fairness::ReadBiased | Fairness::WriteBiased => ()
         }
