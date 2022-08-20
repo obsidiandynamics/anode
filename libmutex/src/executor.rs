@@ -1,7 +1,7 @@
 use crate::completable::{Completable, Outcome};
 use crate::utils;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{SyncSender, TrySendError};
+use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
@@ -22,17 +22,66 @@ pub trait Executor {
 
 type Task = Box<dyn FnOnce() + Send>;
 
+enum SenderImpl {
+    Unbounded(Sender<Task>),
+    Bounded(SyncSender<Task>)
+}
+
+impl SenderImpl {
+    #[inline]
+    fn send(&self, task: Task) {
+        match self {
+            SenderImpl::Unbounded(sender) => sender.send(task).unwrap(),
+            SenderImpl::Bounded(sender) => sender.send(task).unwrap()
+        }
+    }
+
+    #[inline]
+    fn try_send(&self, task: Task) -> bool {
+        match self {
+            SenderImpl::Unbounded(sender) => {
+                sender.send(task).unwrap();
+                true
+            }
+            SenderImpl::Bounded(sender) => {
+                match sender.try_send(task) {
+                    Ok(_) => true,
+                    Err(TrySendError::Full(_)) => false,
+                    Err(_) => unreachable!()
+                }
+            }
+        }
+    }
+}
+
 pub struct ThreadPool {
     running: Arc<AtomicBool>,
-    sender: Option<SyncSender<Task>>,
+    sender: Option<SenderImpl>,
     threads: Option<Vec<JoinHandle<()>>>,
 }
 
+pub enum Queue {
+    Unbounded,
+    Bounded(usize)
+}
+
 impl ThreadPool {
-    pub fn new(threads: u16, bound: usize) -> Self {
+    #[inline]
+    pub fn new(threads: u16, queue: Queue) -> Self {
         assert!(threads > 0);
         let running = Arc::new(AtomicBool::new(true));
-        let (sender, receiver) = mpsc::sync_channel::<Task>(bound);
+        let (sender, receiver) = {
+            match queue {
+                Queue::Unbounded => {
+                    let (tx, rx) = mpsc::channel::<Task>();
+                    (SenderImpl::Unbounded(tx), rx)
+                }
+                Queue::Bounded(bound) => {
+                    let (tx, rx) = mpsc::sync_channel::<Task>(bound);
+                    (SenderImpl::Bounded(tx), rx)
+                }
+            }
+        };
         let receiver = Arc::new(Mutex::new(receiver));
         let threads = (0..threads)
             .into_iter()
@@ -59,6 +108,7 @@ impl ThreadPool {
 }
 
 impl Drop for ThreadPool {
+    #[inline]
     fn drop(&mut self) {
         self.running.store(false, Ordering::Relaxed);
         self.sender = None;
@@ -72,6 +122,7 @@ impl Drop for ThreadPool {
     }
 }
 
+#[inline]
 fn prepare_task<F, G>(pool: &ThreadPool, f: F) -> (SubmissionOutcome<G>, Task)
 where
     F: FnOnce() -> G + Send + 'static,
@@ -84,13 +135,12 @@ where
         Box::new(move || {
             // --- code that is run on the worker thread
             let running = running.load(Ordering::Relaxed);
-            comp.complete_exclusive(|| {
-                if running {
-                    Outcome::Success(f())
-                } else {
-                    Outcome::Abort
-                }
-            });
+            let outcome = if running {
+                Outcome::Success(f())
+            } else {
+                Outcome::Abort
+            };
+            comp.complete(outcome);
             // ---
         })
     };
@@ -98,28 +148,26 @@ where
 }
 
 impl Executor for ThreadPool {
+    #[inline]
     fn submit<F, G>(&self, f: F) -> SubmissionOutcome<G>
     where
         F: FnOnce() -> G + Send + 'static,
         G: Send + 'static,
     {
         let (comp, task) = prepare_task(self, f);
-        self.sender.as_ref().unwrap().send(task).unwrap();
+        self.sender.as_ref().unwrap().send(task);
         comp
     }
 
+    #[inline]
     fn try_submit<F, G>(&self, f: F) -> Option<SubmissionOutcome<G>>
     where
         F: FnOnce() -> G + Send + 'static,
         G: Send + 'static,
     {
         let (comp, task) = prepare_task(self, f);
-        let send_res = self.sender.as_ref().unwrap().try_send(task);
-        match send_res {
-            Ok(_) => Some(comp),
-            Err(TrySendError::Full(_)) => None,
-            Err(_) => unreachable!()
-        }
+        let enqueued = self.sender.as_ref().unwrap().try_send(task);
+        if enqueued { Some(comp) } else { None }
     }
 }
 
