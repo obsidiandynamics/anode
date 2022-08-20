@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 # continuously test the system, using alternating values for the release profile and the number of test threads
 while [ true ]; do
