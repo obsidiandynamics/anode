@@ -246,6 +246,15 @@ impl<T: ?Sized, S: Spec> XLock<T, S> {
             None
         }
     }
+
+    /// Returns a mutable reference to the underlying data.
+    ///
+    /// Since this call borrows the [`MultiLock`] mutably, no actual locking needs to
+    /// take place---the mutable borrow statically guarantees no locks exist.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut T {
+        self.data.get_mut()
+    }
 }
 
 pub struct LockReadGuard<'a, T: ?Sized, S: Spec> {
@@ -274,7 +283,7 @@ impl<'a, T: ?Sized, S: Spec> LockReadGuard<'a, T, S> {
     }
 
     #[inline]
-    pub fn try_upgrade(mut self, duration: Duration) -> UpgradeOutcome<'a, T, S> {
+    pub fn try_upgrade(mut self, duration: Duration) -> LockUpgradeOutcome<'a, T, S> {
         match self.lock.try_upgrade(duration) {
             None => UpgradeOutcome::Unchanged(self),
             Some(guard) => {
@@ -334,12 +343,14 @@ impl<T: ?Sized, S: Spec> DerefMut for LockWriteGuard<'_, T, S> {
     }
 }
 
-pub enum UpgradeOutcome<'a, T: ?Sized, S: Spec> {
-    Upgraded(LockWriteGuard<'a, T, S>),
-    Unchanged(LockReadGuard<'a, T, S>),
+pub type LockUpgradeOutcome<'a, T, S> = UpgradeOutcome<LockWriteGuard<'a, T, S>, LockReadGuard<'a, T, S>>;
+
+pub enum UpgradeOutcome<W, R> {
+    Upgraded(W),
+    Unchanged(R),
 }
 
-impl<'a, T: ?Sized, S: Spec> UpgradeOutcome<'a, T, S> {
+impl<W, R> UpgradeOutcome<W, R> {
     #[inline]
     pub fn is_upgraded(&self) -> bool {
         matches!(self, UpgradeOutcome::Upgraded(_))
@@ -351,7 +362,7 @@ impl<'a, T: ?Sized, S: Spec> UpgradeOutcome<'a, T, S> {
     }
 
     #[inline]
-    pub fn upgraded(self) -> Option<LockWriteGuard<'a, T, S>> {
+    pub fn upgraded(self) -> Option<W> {
         match self {
             UpgradeOutcome::Upgraded(guard) => Some(guard),
             UpgradeOutcome::Unchanged(_) => None,
@@ -359,10 +370,18 @@ impl<'a, T: ?Sized, S: Spec> UpgradeOutcome<'a, T, S> {
     }
 
     #[inline]
-    pub fn unchanged(self) -> Option<LockReadGuard<'a, T, S>> {
+    pub fn unchanged(self) -> Option<R> {
         match self {
             UpgradeOutcome::Upgraded(_) => None,
             UpgradeOutcome::Unchanged(guard) => Some(guard),
+        }
+    }
+
+    #[inline]
+    pub fn map<WW, RR>(self, f_w: impl FnOnce(W) -> WW, f_r: impl FnOnce(R) -> RR) -> UpgradeOutcome<WW, RR> {
+        match self {
+            UpgradeOutcome::Upgraded(w) => UpgradeOutcome::Upgraded(f_w(w)),
+            UpgradeOutcome::Unchanged(r) => UpgradeOutcome::Unchanged(f_r(r)),
         }
     }
 }
