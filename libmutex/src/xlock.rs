@@ -388,3 +388,6 @@ impl<W, R> UpgradeOutcome<W, R> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub mod locklike;
