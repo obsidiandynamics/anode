@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
+use crate::test_utils::{Addable, BoxedInt};
 use crate::xlock::locklike::{LockBox, LockBoxSized};
 use crate::xlock::{LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, XLock};
 
@@ -88,6 +89,23 @@ fn box_sized_into_inner() {
 
 #[test]
 fn micro_bench() {
+    let lock = XLock::<_, ReadBiased>::new(0);
+    __micro_bench(lock);
+}
+
+#[test]
+fn micro_bench_boxed_int() {
+    let lock = XLock::<_, ReadBiased>::new(BoxedInt::new(0));
+    __micro_bench(lock);
+}
+
+#[test]
+fn micro_bench_string() {
+    let lock = XLock::<_, ReadBiased>::new(String::from("0"));
+    __micro_bench(lock);
+}
+
+fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
     fn read_eventually<T, S: Spec>(lock: &XLock<T, S>, duration: Duration) -> LockReadGuard<T, S> {
         let mut val = None;
         while val.is_none() {
@@ -118,7 +136,7 @@ fn micro_bench() {
     let debug_exits = false;
     let sleep_time = Duration::from_millis(0);
 
-    let protected = Arc::new(XLock::<_, ReadBiased>::new(0));
+    let protected = Arc::new(lock);
 
     let mut threads = Vec::with_capacity(num_readers + num_writers + num_downgraders);
     let upgrade_timeouts = Arc::new(AtomicU64::default());
@@ -131,10 +149,11 @@ fn micro_bench() {
                 {
                     let val = read_eventually(&protected, read_timeout);
                     if debug_locks { println!("reader {i} read-locked"); }
-                    if *val < last_val {
-                        panic!("Error in reader: value went from {last_val} to {val}", val = *val);
+                    let current = val.get();
+                    if current < last_val {
+                        panic!("Error in reader: value went from {last_val} to {current}");
                     }
-                    last_val = *val;
+                    last_val = current;
                     if debug_locks { println!("reader {i} read-unlocked"); }
                 }
                 thread::sleep(sleep_time);
@@ -150,7 +169,7 @@ fn micro_bench() {
                 {
                     let mut val = write_eventually(&protected, write_timeout);
                     if debug_locks { println!("writer {i} write-locked"); }
-                    *val += 1;
+                    *val = val.add(1);
                     if debug_locks { println!("writer {i} write-unlocked"); }
                 }
                 thread::sleep(sleep_time);
@@ -168,14 +187,15 @@ fn micro_bench() {
                 {
                     let mut val = protected.write();
                     if debug_locks { println!("downgrader {i} write-locked"); }
-                    *val += 1;
+                    *val = val.add(1);
 
                     let val = val.downgrade();
                     if debug_locks { println!("downgrader {i} downgraded"); }
-                    if *val < last_val {
-                        panic!("Error in downgrader: value went from {last_val} to {val}", val = *val);
+                    let current = val.get();
+                    if current < last_val {
+                        panic!("Error in downgrader: value went from {last_val} to {current}");
                     }
-                    last_val = *val;
+                    last_val = current;
                     if debug_locks { println!("downgrader {i} read-unlocked"); }
                 }
                 thread::sleep(sleep_time);
@@ -194,16 +214,17 @@ fn micro_bench() {
                 {
                     let val = read_eventually(&protected, read_timeout);
                     if debug_locks { println!("upgrader {i} read-locked"); }
-                    if *val < last_val {
-                        panic!("Error in reader: value went from {last_val} to {val}", val = *val);
+                    let current = val.get();
+                    if current < last_val {
+                        panic!("Error in reader: value went from {last_val} to {current}");
                     }
-                    last_val = *val;
+                    last_val = current;
 
                     let val = val.try_upgrade(upgrade_timeout);
                     match val {
                         LockUpgradeOutcome::Upgraded(mut val) => {
                             if debug_locks { println!("upgrader {i} upgraded"); }
-                            *val += 1;
+                            *val = val.add(1);
                             if debug_locks { println!("upgrader {i} write-unlocked"); }
                         },
                         LockUpgradeOutcome::Unchanged(_) => {
@@ -223,7 +244,8 @@ fn micro_bench() {
     }
     let upgrade_timeouts = upgrade_timeouts.load(Ordering::Relaxed);
     let expected_writes = ((num_writers + num_downgraders + num_upgraders) * iterations) as u64 - upgrade_timeouts;
-    assert_eq!(expected_writes, *protected.read());
+    let current = protected.read().get();
+    assert_eq!(expected_writes as i64, current);
 
     let time_taken = (Instant::now() - start_time).as_secs_f64();
     let ops = (num_readers + num_writers + 2 * num_downgraders + 2 * num_upgraders) * iterations;

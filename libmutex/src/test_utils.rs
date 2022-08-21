@@ -6,8 +6,6 @@ use std::sync::{Arc, Barrier};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{fmt, thread};
-use std::borrow::Borrow;
-use std::ops::Deref;
 
 // Constants used for waiting in tests.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
