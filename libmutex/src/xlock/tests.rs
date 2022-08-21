@@ -89,7 +89,7 @@ fn box_sized_into_inner() {
 
 #[test]
 fn micro_bench_int() {
-    __micro_bench(XLock::<_, Faulty>::new(0), BenchConfig::default());
+    __micro_bench(XLock::<_, ReadBiased>::new(0), BenchConfig::default());
 }
 
 #[test]
