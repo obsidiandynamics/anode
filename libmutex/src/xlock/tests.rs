@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use crate::test_utils::{Addable, BoxedInt};
 use crate::xlock::locklike::{LockBox, LockBoxSized};
-use crate::xlock::{LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, XLock};
+use crate::xlock::{Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, XLock};
 
 #[test]
 fn box_cycle() {
@@ -88,24 +88,40 @@ fn box_sized_into_inner() {
 }
 
 #[test]
-fn micro_bench() {
-    let lock = XLock::<_, ReadBiased>::new(0);
-    __micro_bench(lock);
+fn micro_bench_int() {
+    __micro_bench(XLock::<_, Faulty>::new(0), BenchConfig::default());
+}
+
+#[test]
+fn micro_bench_faulty() {
+    __micro_bench(XLock::<_, Faulty>::new(0), BenchConfig { yield_between: false, asserts_enabled: false});
 }
 
 #[test]
 fn micro_bench_boxed_int() {
-    let lock = XLock::<_, ReadBiased>::new(BoxedInt::new(0));
-    __micro_bench(lock);
+    __micro_bench(XLock::<_, ReadBiased>::new(BoxedInt::new(0)), BenchConfig::default());
 }
 
 #[test]
 fn micro_bench_string() {
-    let lock = XLock::<_, ReadBiased>::new(String::from("0"));
-    __micro_bench(lock);
+    __micro_bench(XLock::<_, ReadBiased>::new(String::from("0")), BenchConfig::default());
 }
 
-fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
+struct BenchConfig {
+    yield_between: bool,
+    asserts_enabled: bool
+}
+
+impl Default for BenchConfig {
+    fn default() -> Self {
+        Self {
+            yield_between: false,
+            asserts_enabled: true
+        }
+    }
+}
+
+fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>, config: BenchConfig) {
     fn read_eventually<T, S: Spec>(lock: &XLock<T, S>, duration: Duration) -> LockReadGuard<T, S> {
         let mut val = None;
         while val.is_none() {
@@ -148,9 +164,10 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
             for _ in 0..iterations {
                 {
                     let val = read_eventually(&protected, read_timeout);
+                    if config.yield_between { thread::yield_now(); }
                     if debug_locks { println!("reader {i} read-locked"); }
                     let current = val.get();
-                    if current < last_val {
+                    if config.asserts_enabled && current < last_val {
                         panic!("Error in reader: value went from {last_val} to {current}");
                     }
                     last_val = current;
@@ -168,6 +185,7 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
             for _ in 0..iterations {
                 {
                     let mut val = write_eventually(&protected, write_timeout);
+                    if config.yield_between { thread::yield_now(); }
                     if debug_locks { println!("writer {i} write-locked"); }
                     *val = val.add(1);
                     if debug_locks { println!("writer {i} write-unlocked"); }
@@ -186,13 +204,14 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
             for _ in 0..iterations {
                 {
                     let mut val = protected.write();
+                    if config.yield_between { thread::yield_now(); }
                     if debug_locks { println!("downgrader {i} write-locked"); }
                     *val = val.add(1);
 
                     let val = val.downgrade();
                     if debug_locks { println!("downgrader {i} downgraded"); }
                     let current = val.get();
-                    if current < last_val {
+                    if config.asserts_enabled && current < last_val {
                         panic!("Error in downgrader: value went from {last_val} to {current}");
                     }
                     last_val = current;
@@ -213,9 +232,10 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
             for _ in 0..iterations {
                 {
                     let val = read_eventually(&protected, read_timeout);
+                    if config.yield_between { thread::yield_now(); }
                     if debug_locks { println!("upgrader {i} read-locked"); }
                     let current = val.get();
-                    if current < last_val {
+                    if config.asserts_enabled && current < last_val {
                         panic!("Error in reader: value went from {last_val} to {current}");
                     }
                     last_val = current;
@@ -223,6 +243,7 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
                     let val = val.try_upgrade(upgrade_timeout);
                     match val {
                         LockUpgradeOutcome::Upgraded(mut val) => {
+                            if config.yield_between { thread::yield_now(); }
                             if debug_locks { println!("upgrader {i} upgraded"); }
                             *val = val.add(1);
                             if debug_locks { println!("upgrader {i} write-unlocked"); }
@@ -245,7 +266,7 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>) {
     let upgrade_timeouts = upgrade_timeouts.load(Ordering::Relaxed);
     let expected_writes = ((num_writers + num_downgraders + num_upgraders) * iterations) as u64 - upgrade_timeouts;
     let current = protected.read().get();
-    assert_eq!(expected_writes as i64, current);
+    if config.asserts_enabled { assert_eq!(expected_writes as i64, current); }
 
     let time_taken = (Instant::now() - start_time).as_secs_f64();
     let ops = (num_readers + num_writers + 2 * num_downgraders + 2 * num_upgraders) * iterations;
