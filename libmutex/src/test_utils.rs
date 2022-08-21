@@ -31,7 +31,7 @@ impl From<FairnessVariant> for Fairness {
 }
 
 impl FairnessVariant {
-    pub fn make_lock<T: 'static>(&self, t: T) -> LockBox<T> {
+    pub fn make_lock<T: Sync + Send + 'static>(&self, t: T) -> LockBox<T> {
         println!("test running with fairness {:?}", self.0);
         match self.0 {
             Fairness::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),

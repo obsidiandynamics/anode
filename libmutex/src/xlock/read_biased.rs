@@ -2,7 +2,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::utils;
-use crate::xlock::Spec;
+use crate::xlock::Moderator;
 
 #[derive(Debug)]
 pub struct ReadBiased;
@@ -19,7 +19,7 @@ struct ReadBiasedState {
     writer: bool,
 }
 
-impl Spec for ReadBiased {
+impl Moderator for ReadBiased {
     type Sync = ReadBiasedSync;
 
     #[inline]

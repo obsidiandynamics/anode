@@ -2,7 +2,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::utils;
-use crate::xlock::Spec;
+use crate::xlock::Moderator;
 
 #[derive(Debug)]
 pub struct ArrivalOrdered;
@@ -30,7 +30,7 @@ impl ArrivalOrderedState {
     }
 }
 
-impl Spec for ArrivalOrdered {
+impl Moderator for ArrivalOrdered {
     type Sync = ArrivalOrderedSync;
 
     #[inline]

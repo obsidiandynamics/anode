@@ -15,12 +15,12 @@ pub use write_biased::WriteBiased;
 pub use arrival_ordered::ArrivalOrdered;
 pub use faulty::Faulty;
 
-unsafe impl<T: ?Sized + Send, S: Spec> Send for XLock<T, S> {}
-unsafe impl<T: ?Sized + Send + Sync, S: Spec> Sync for XLock<T, S> {}
-unsafe impl<T: ?Sized + Sync, S: Spec> Sync for LockReadGuard<'_, T, S> {}
-unsafe impl<T: ?Sized + Sync, S: Spec> Sync for LockWriteGuard<'_, T, S> {}
+unsafe impl<T: ?Sized + Send, M: Moderator> Send for XLock<T, M> {}
+unsafe impl<T: ?Sized + Send + Sync, M: Moderator> Sync for XLock<T, M> {}
+unsafe impl<T: ?Sized + Sync, M: Moderator> Sync for LockReadGuard<'_, T, M> {}
+unsafe impl<T: ?Sized + Sync, M: Moderator> Sync for LockWriteGuard<'_, T, M> {}
 
-pub trait Spec: Debug {
+pub trait Moderator: Debug {
     type Sync;
 
     fn new() -> Self::Sync;
@@ -39,16 +39,16 @@ pub trait Spec: Debug {
 }
 
 #[derive(Debug)]
-pub struct XLock<T: ?Sized, S: Spec> {
-    sync: S::Sync,
+pub struct XLock<T: ?Sized, M: Moderator> {
+    sync: M::Sync,
     data: UnsafeCell<T>,
 }
 
-impl<T, S: Spec> XLock<T, S> {
+impl<T, M: Moderator> XLock<T, M> {
     #[inline]
     pub fn new(t: T) -> Self {
         Self {
-            sync: S::new(),
+            sync: M::new(),
             data: UnsafeCell::new(t),
         }
     }
@@ -58,15 +58,15 @@ impl<T, S: Spec> XLock<T, S> {
     }
 }
 
-impl<T: ?Sized, S: Spec> XLock<T, S> {
+impl<T: ?Sized, M: Moderator> XLock<T, M> {
     #[inline]
-    pub fn read(&self) -> LockReadGuard<'_, T, S> {
+    pub fn read(&self) -> LockReadGuard<'_, T, M> {
         self.try_read(Duration::MAX).unwrap()
     }
 
     #[inline]
-    pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T, S>> {
-        if S::try_read(&self.sync, duration) {
+    pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T, M>> {
+        if M::try_read(&self.sync, duration) {
             let data = unsafe { NonNull::new_unchecked(self.data.get()) };
             Some(LockReadGuard {
                 data,
@@ -81,17 +81,17 @@ impl<T: ?Sized, S: Spec> XLock<T, S> {
 
     #[inline]
     fn read_unlock(&self) {
-        S::read_unlock(&self.sync);
+        M::read_unlock(&self.sync);
     }
 
     #[inline]
-    pub fn write(&self) -> LockWriteGuard<'_, T, S> {
+    pub fn write(&self) -> LockWriteGuard<'_, T, M> {
         self.try_write(Duration::MAX).unwrap()
     }
 
     #[inline]
-    pub fn try_write(&self, duration: Duration) -> Option<LockWriteGuard<'_, T, S>> {
-        if S::try_write(&self.sync, duration) {
+    pub fn try_write(&self, duration: Duration) -> Option<LockWriteGuard<'_, T, M>> {
+        if M::try_write(&self.sync, duration) {
             Some(LockWriteGuard {
                 lock: self,
                 locked: true,
@@ -104,12 +104,12 @@ impl<T: ?Sized, S: Spec> XLock<T, S> {
 
     #[inline]
     fn write_unlock(&self) {
-        S::write_unlock(&self.sync);
+        M::write_unlock(&self.sync);
     }
 
     #[inline]
-    pub fn downgrade(&self) -> LockReadGuard<T, S> {
-        S::downgrade(&self.sync);
+    pub fn downgrade(&self) -> LockReadGuard<T, M> {
+        M::downgrade(&self.sync);
         let data = unsafe { NonNull::new_unchecked(self.data.get()) };
         LockReadGuard {
             data,
@@ -120,13 +120,13 @@ impl<T: ?Sized, S: Spec> XLock<T, S> {
     }
 
     #[inline]
-    fn upgrade(&self) -> LockWriteGuard<'_, T, S> {
+    fn upgrade(&self) -> LockWriteGuard<'_, T, M> {
         self.try_upgrade(Duration::MAX).unwrap()
     }
 
     #[inline]
-    fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T, S>> {
-        if S::try_upgrade(&self.sync, duration) {
+    fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T, M>> {
+        if M::try_upgrade(&self.sync, duration) {
             Some(LockWriteGuard {
                 lock: self,
                 locked: true,
@@ -147,16 +147,16 @@ impl<T: ?Sized, S: Spec> XLock<T, S> {
     }
 }
 
-pub struct LockReadGuard<'a, T: ?Sized, S: Spec> {
+pub struct LockReadGuard<'a, T: ?Sized, M: Moderator> {
     data: NonNull<T>,
-    lock: &'a XLock<T, S>,
+    lock: &'a XLock<T, M>,
     locked: bool,
 
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
 }
 
-impl<T: ?Sized, S: Spec> Drop for LockReadGuard<'_, T, S> {
+impl<T: ?Sized, M: Moderator> Drop for LockReadGuard<'_, T, M> {
     #[inline]
     fn drop(&mut self) {
         if self.locked {
@@ -165,15 +165,15 @@ impl<T: ?Sized, S: Spec> Drop for LockReadGuard<'_, T, S> {
     }
 }
 
-impl<'a, T: ?Sized, S: Spec> LockReadGuard<'a, T, S> {
+impl<'a, T: ?Sized, M: Moderator> LockReadGuard<'a, T, M> {
     #[inline]
-    pub fn upgrade(mut self) -> LockWriteGuard<'a, T, S> {
+    pub fn upgrade(mut self) -> LockWriteGuard<'a, T, M> {
         self.locked = false;
         self.lock.upgrade()
     }
 
     #[inline]
-    pub fn try_upgrade(mut self, duration: Duration) -> LockUpgradeOutcome<'a, T, S> {
+    pub fn try_upgrade(mut self, duration: Duration) -> LockUpgradeOutcome<'a, T, M> {
         match self.lock.try_upgrade(duration) {
             None => UpgradeOutcome::Unchanged(self),
             Some(guard) => {
@@ -184,7 +184,7 @@ impl<'a, T: ?Sized, S: Spec> LockReadGuard<'a, T, S> {
     }
 }
 
-impl<T: ?Sized, S: Spec> Deref for LockReadGuard<'_, T, S> {
+impl<T: ?Sized, M: Moderator> Deref for LockReadGuard<'_, T, M> {
     type Target = T;
 
     #[inline]
@@ -193,14 +193,14 @@ impl<T: ?Sized, S: Spec> Deref for LockReadGuard<'_, T, S> {
     }
 }
 
-pub struct LockWriteGuard<'a, T: ?Sized, S: Spec> {
-    lock: &'a XLock<T, S>,
+pub struct LockWriteGuard<'a, T: ?Sized, M: Moderator> {
+    lock: &'a XLock<T, M>,
     locked: bool,
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
 }
 
-impl<T: ?Sized, S: Spec> Drop for LockWriteGuard<'_, T, S> {
+impl<T: ?Sized, M: Moderator> Drop for LockWriteGuard<'_, T, M> {
     #[inline]
     fn drop(&mut self) {
         if self.locked {
@@ -209,15 +209,15 @@ impl<T: ?Sized, S: Spec> Drop for LockWriteGuard<'_, T, S> {
     }
 }
 
-impl<'a, T: ?Sized, S: Spec> LockWriteGuard<'a, T, S> {
+impl<'a, T: ?Sized, M: Moderator> LockWriteGuard<'a, T, M> {
     #[inline]
-    pub fn downgrade(mut self) -> LockReadGuard<'a, T, S> {
+    pub fn downgrade(mut self) -> LockReadGuard<'a, T, M> {
         self.locked = false;
         self.lock.downgrade()
     }
 }
 
-impl<T: ?Sized, S: Spec> Deref for LockWriteGuard<'_, T, S> {
+impl<T: ?Sized, M: Moderator> Deref for LockWriteGuard<'_, T, M> {
     type Target = T;
 
     #[inline]
@@ -226,14 +226,14 @@ impl<T: ?Sized, S: Spec> Deref for LockWriteGuard<'_, T, S> {
     }
 }
 
-impl<T: ?Sized, S: Spec> DerefMut for LockWriteGuard<'_, T, S> {
+impl<T: ?Sized, M: Moderator> DerefMut for LockWriteGuard<'_, T, M> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.lock.data.get() }
     }
 }
 
-pub type LockUpgradeOutcome<'a, T, S> = UpgradeOutcome<LockWriteGuard<'a, T, S>, LockReadGuard<'a, T, S>>;
+pub type LockUpgradeOutcome<'a, T, M> = UpgradeOutcome<LockWriteGuard<'a, T, M>, LockReadGuard<'a, T, M>>;
 
 pub enum UpgradeOutcome<W, R> {
     Upgraded(W),
@@ -278,6 +278,12 @@ impl<W, R> UpgradeOutcome<W, R> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tr_tests;
+
+#[cfg(test)]
+mod pl_tests;
 
 #[cfg(test)]
 pub mod locklike;

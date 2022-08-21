@@ -1,5 +1,5 @@
 use std::time::Duration;
-use crate::xlock::Spec;
+use crate::xlock::Moderator;
 
 #[derive(Debug)]
 pub struct Faulty;
@@ -8,7 +8,7 @@ pub struct Faulty;
 pub struct FaultySync {
 }
 
-impl Spec for Faulty {
+impl Moderator for Faulty {
     type Sync = FaultySync;
 
     #[inline]

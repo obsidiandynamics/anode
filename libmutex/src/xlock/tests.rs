@@ -3,18 +3,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 use crate::test_utils::{Addable, BoxedInt};
-use crate::xlock::locklike::{LockBox, LockBoxSized, MODERATOR_KINDS};
-use crate::xlock::{ArrivalOrdered, Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, WriteBiased, XLock};
+use crate::xlock::locklike::{LockBoxSized, MODERATOR_KINDS};
+use crate::xlock::{ArrivalOrdered, Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Moderator, WriteBiased, XLock};
 
 #[test]
 fn box_cycle() {
     for moderator in MODERATOR_KINDS {
-        let boxed: LockBox<_> = moderator.lock_for_test(42);
-        __box_cycle(boxed);
+        __box_cycle(moderator.lock_for_test(42));
     }
 }
 
-fn __box_cycle(boxed: LockBox<i32>) {
+fn __box_cycle(boxed: LockBoxSized<i32>) {
     // read -> release
     {
         let guard = boxed.read();
@@ -131,8 +130,8 @@ impl Default for BenchConfig {
     }
 }
 
-fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>, config: BenchConfig) {
-    fn read_eventually<T, S: Spec>(lock: &XLock<T, S>, duration: Duration) -> LockReadGuard<T, S> {
+fn __micro_bench<A: Addable + 'static, M: Moderator + 'static>(lock: XLock<A, M>, config: BenchConfig) {
+    fn read_eventually<T, M: Moderator>(lock: &XLock<T, M>, duration: Duration) -> LockReadGuard<T, M> {
         let mut val = None;
         while val.is_none() {
             val = lock.try_read(duration);
@@ -140,7 +139,7 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>, con
         val.unwrap()
     }
 
-    fn write_eventually<T, S: Spec>(lock: &XLock<T, S>, duration: Duration) -> LockWriteGuard<T, S> {
+    fn write_eventually<T, M: Moderator>(lock: &XLock<T, M>, duration: Duration) -> LockWriteGuard<T, M> {
         let mut val = None;
         while val.is_none() {
             val = lock.try_write(duration);

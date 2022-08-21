@@ -1,4 +1,4 @@
-use crate::xlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, ReadBiased, Spec, UpgradeOutcome, WriteBiased, XLock};
+use crate::xlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, ReadBiased, Moderator, UpgradeOutcome, WriteBiased, XLock};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
@@ -9,7 +9,7 @@ pub type LockBoxSized<T> = Box<dyn LocklikeSized<T>>;
 pub type DynLockUpgradeOutcome<'a, T> =
 UpgradeOutcome<DynLockWriteGuard<'a, T>, DynLockReadGuard<'a, T>>;
 
-pub trait Locklike<T: ?Sized> {
+pub trait Locklike<T: ?Sized>: Sync + Send {
     fn read(&self) -> DynLockReadGuard<T>;
 
     fn try_read(&self, duration: Duration) -> Option<DynLockReadGuard<T>>;
@@ -31,7 +31,7 @@ trait LockReadGuardlike<'a, T: ?Sized>: Deref<Target = T> {
     fn try_upgrade_box(self: Box<Self>, duration: Duration) -> DynLockUpgradeOutcome<'a, T>;
 }
 
-impl<'a, T: ?Sized, S: Spec> LockReadGuardlike<'a, T> for LockReadGuard<'a, T, S> {
+impl<'a, T: ?Sized, M: Moderator> LockReadGuardlike<'a, T> for LockReadGuard<'a, T, M> {
     fn upgrade_box(self: Box<Self>) -> DynLockWriteGuard<'a, T> {
         self.upgrade().into()
     }
@@ -63,8 +63,8 @@ impl<T: ?Sized> Deref for DynLockReadGuard<'_, T> {
     }
 }
 
-impl<'a, T: ?Sized, S: Spec> From<LockReadGuard<'a, T, S>> for DynLockReadGuard<'a, T> {
-    fn from(guard: LockReadGuard<'a, T, S>) -> Self {
+impl<'a, T: ?Sized, M: Moderator> From<LockReadGuard<'a, T, M>> for DynLockReadGuard<'a, T> {
+    fn from(guard: LockReadGuard<'a, T, M>) -> Self {
         DynLockReadGuard(Box::new(guard))
     }
 }
@@ -73,7 +73,7 @@ trait LockWriteGuardlike<'a, T: ?Sized>: DerefMut<Target = T> {
     fn downgrade_box(self: Box<Self>) -> DynLockReadGuard<'a, T>;
 }
 
-impl<'a, T: ?Sized, S: Spec> LockWriteGuardlike<'a, T> for LockWriteGuard<'a, T, S> {
+impl<'a, T: ?Sized, M: Moderator> LockWriteGuardlike<'a, T> for LockWriteGuard<'a, T, M> {
     fn downgrade_box(self: Box<Self>) -> DynLockReadGuard<'a, T> {
         self.downgrade().into()
     }
@@ -103,13 +103,13 @@ impl<T: ?Sized> DerefMut for DynLockWriteGuard<'_, T> {
     }
 }
 
-impl<'a, T: ?Sized, S: Spec> From<LockWriteGuard<'a, T, S>> for DynLockWriteGuard<'a, T> {
-    fn from(guard: LockWriteGuard<'a, T, S>) -> Self {
+impl<'a, T: ?Sized, M: Moderator> From<LockWriteGuard<'a, T, M>> for DynLockWriteGuard<'a, T> {
+    fn from(guard: LockWriteGuard<'a, T, M>) -> Self {
         DynLockWriteGuard(Box::new(guard))
     }
 }
 
-impl<T: ?Sized, S: Spec> Locklike<T> for XLock<T, S> {
+impl<T: ?Sized + Sync + Send, M: Moderator> Locklike<T> for XLock<T, M> {
     fn read(&self) -> DynLockReadGuard<T> {
         DynLockReadGuard(Box::new(self.read()))
     }
@@ -132,13 +132,13 @@ impl<T: ?Sized, S: Spec> Locklike<T> for XLock<T, S> {
 }
 
 
-impl<T, S: Spec> XLock<T, S> {
+impl<T, M: Moderator> XLock<T, M> {
     fn lock_into_inner(self) -> T {
         self.into_inner()
     }
 }
 
-impl<T, S: Spec> LocklikeSized<T> for XLock<T, S> {
+impl<T: Sync + Send, M: Moderator> LocklikeSized<T> for XLock<T, M> {
     fn into_inner(self: Box<Self>) -> T {
         self.lock_into_inner()
     }
@@ -158,7 +158,7 @@ pub const MODERATOR_KINDS: [ModeratorKind; 3] = [
 ];
 
 impl ModeratorKind {
-    pub fn lock_for_test<T: 'static>(&self, t: T) -> LockBox<T> {
+    pub fn lock_for_test<T: Sync + Send + 'static>(&self, t: T) -> LockBoxSized<T> {
         println!("test running with moderator {:?}", self);
         match self {
             ModeratorKind::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),
