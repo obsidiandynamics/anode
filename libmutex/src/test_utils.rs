@@ -6,6 +6,8 @@ use std::sync::{Arc, Barrier};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{fmt, thread};
+use crate::xlock::locklike::{LockBox};
+use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 
 // Constants used for waiting in tests.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
@@ -25,6 +27,17 @@ impl From<FairnessVariant> for Fairness {
     fn from(fv: FairnessVariant) -> Self {
         println!("test running with fairness {:?}", fv.0);
         fv.0
+    }
+}
+
+impl FairnessVariant {
+    pub fn make_lock<T: 'static>(&self, t: T) -> LockBox<T> {
+        println!("test running with fairness {:?}", self.0);
+        match self.0 {
+            Fairness::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),
+            Fairness::WriteBiased => Box::new(XLock::<_, WriteBiased>::new(t)),
+            Fairness::ArrivalOrdered => Box::new(XLock::<_, ArrivalOrdered>::new(t)),
+        }
     }
 }
 

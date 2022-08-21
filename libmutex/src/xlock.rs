@@ -6,9 +6,13 @@ use std::ptr::NonNull;
 use std::time::Duration;
 
 mod read_biased;
+mod write_biased;
+mod arrival_ordered;
 mod faulty;
 
 pub use read_biased::ReadBiased;
+pub use write_biased::WriteBiased;
+pub use arrival_ordered::ArrivalOrdered;
 pub use faulty::Faulty;
 
 unsafe impl<T: ?Sized + Send, S: Spec> Send for XLock<T, S> {}

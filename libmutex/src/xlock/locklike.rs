@@ -1,4 +1,4 @@
-use crate::xlock::{LockReadGuard, LockWriteGuard, Spec, UpgradeOutcome, XLock};
+use crate::xlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, ReadBiased, Spec, UpgradeOutcome, WriteBiased, XLock};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
@@ -141,5 +141,29 @@ impl<T, S: Spec> XLock<T, S> {
 impl<T, S: Spec> LocklikeSized<T> for XLock<T, S> {
     fn into_inner(self: Box<Self>) -> T {
         self.lock_into_inner()
+    }
+}
+
+#[derive(Debug)]
+pub enum ModeratorKind {
+    ReadBiased,
+    WriteBiased,
+    ArrivalOrdered
+}
+
+pub const MODERATOR_KINDS: [ModeratorKind; 3] = [
+    ModeratorKind::ReadBiased,
+    ModeratorKind::WriteBiased,
+    ModeratorKind::ArrivalOrdered,
+];
+
+impl ModeratorKind {
+    pub fn lock_for_test<T: 'static>(&self, t: T) -> LockBox<T> {
+        println!("test running with moderator {:?}", self);
+        match self {
+            ModeratorKind::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),
+            ModeratorKind::WriteBiased => Box::new(XLock::<_, WriteBiased>::new(t)),
+            ModeratorKind::ArrivalOrdered => Box::new(XLock::<_, ArrivalOrdered>::new(t)),
+        }
     }
 }

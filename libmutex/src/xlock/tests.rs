@@ -3,14 +3,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 use crate::test_utils::{Addable, BoxedInt};
-use crate::xlock::locklike::{LockBox, LockBoxSized};
-use crate::xlock::{Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, XLock};
+use crate::xlock::locklike::{LockBox, LockBoxSized, MODERATOR_KINDS};
+use crate::xlock::{ArrivalOrdered, Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Spec, WriteBiased, XLock};
 
 #[test]
 fn box_cycle() {
-    let lock = XLock::<_, ReadBiased>::new(42);
-    let boxed: LockBox<_> = Box::new(lock);
+    for moderator in MODERATOR_KINDS {
+        let boxed: LockBox<_> = moderator.lock_for_test(42);
+        __box_cycle(boxed);
+    }
+}
 
+fn __box_cycle(boxed: LockBox<i32>) {
     // read -> release
     {
         let guard = boxed.read();
@@ -90,6 +94,8 @@ fn box_sized_into_inner() {
 #[test]
 fn micro_bench_int() {
     __micro_bench(XLock::<_, ReadBiased>::new(0), BenchConfig::default());
+    __micro_bench(XLock::<_, WriteBiased>::new(0), BenchConfig::default());
+    __micro_bench(XLock::<_, ArrivalOrdered>::new(0), BenchConfig::default());
 }
 
 #[test]
@@ -100,11 +106,15 @@ fn micro_bench_faulty() {
 #[test]
 fn micro_bench_boxed_int() {
     __micro_bench(XLock::<_, ReadBiased>::new(BoxedInt::new(0)), BenchConfig::default());
+    __micro_bench(XLock::<_, WriteBiased>::new(BoxedInt::new(0)), BenchConfig::default());
+    __micro_bench(XLock::<_, ArrivalOrdered>::new(BoxedInt::new(0)), BenchConfig::default());
 }
 
 #[test]
 fn micro_bench_string() {
     __micro_bench(XLock::<_, ReadBiased>::new(String::from("0")), BenchConfig::default());
+    __micro_bench(XLock::<_, WriteBiased>::new(String::from("0")), BenchConfig::default());
+    __micro_bench(XLock::<_, ArrivalOrdered>::new(String::from("0")), BenchConfig::default());
 }
 
 struct BenchConfig {
@@ -138,11 +148,11 @@ fn __micro_bench<A: Addable + 'static, S: Spec + 'static>(lock: XLock<A, S>, con
         val.unwrap()
     }
 
-    let num_readers = 4;
-    let num_writers = 4;
-    let num_downgraders = 4;
-    let num_upgraders = 4;
-    let iterations = 1000;
+    let num_readers = 3;
+    let num_writers = 3;
+    let num_downgraders = 2;
+    let num_upgraders = 2;
+    let iterations = 100;
 
     let read_timeout = Duration::MAX;//Duration::from_millis(10);
     let write_timeout = Duration::MAX;//Duration::from_millis(10);
