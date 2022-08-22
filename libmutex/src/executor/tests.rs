@@ -15,7 +15,9 @@ fn unbounded_execute_tasks_via_submit() {
             .collect::<Vec<_>>();
 
         for task in tasks {
-            assert_eq!(Outcome::Success(()), *task.get());
+            let completed = task.get();
+            assert!(completed.is_success());
+            assert_eq!(Outcome::Success(()), *completed);
         }
     }
 }
@@ -52,7 +54,9 @@ fn unbounded_execute_tasks_via_try_submit() {
             .collect::<Vec<_>>();
 
         for task in tasks {
-            assert_eq!(Outcome::Success(()), *task.get());
+            let completed = task.get();
+            assert!(completed.is_success());
+            assert_eq!(Outcome::Success(()), *completed);
         }
     }
 }
@@ -75,7 +79,9 @@ fn bounded_execute_tasks_via_try_submit() {
             .collect::<Vec<_>>();
 
         for task in tasks {
-            assert_eq!(Outcome::Success(()), *task.get());
+            let completed = task.get();
+            assert!(completed.is_success());
+            assert_eq!(Outcome::Success(()), *completed);
         }
     }
 }
@@ -113,7 +119,9 @@ fn unbounded_abort_from_submitter() {
     println!("main tripped process_task_1");
     assert_eq!(Outcome::Success(()), *task_1.get());
     assert_eq!(Outcome::Abort, *task_2.get());
+    assert!(task_2.get().is_abort());
     assert_eq!(Outcome::Abort, *task_3.get());
+    assert!(task_3.get().is_abort());
 }
 
 #[test]

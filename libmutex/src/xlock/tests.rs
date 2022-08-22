@@ -9,7 +9,7 @@ use crate::xlock::{ArrivalOrdered, Faulty, LockReadGuard, LockUpgradeOutcome, Lo
 #[test]
 fn box_cycle() {
     for moderator in MODERATOR_KINDS {
-        __box_cycle(moderator.lock_for_test(42));
+        __box_cycle(moderator.make_lock_for_test(42));
     }
 }
 

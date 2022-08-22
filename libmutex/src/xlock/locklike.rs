@@ -158,7 +158,7 @@ pub const MODERATOR_KINDS: [ModeratorKind; 3] = [
 ];
 
 impl ModeratorKind {
-    pub fn lock_for_test<T: Sync + Send + 'static>(&self, t: T) -> LockBoxSized<T> {
+    pub fn make_lock_for_test<T: Sync + Send + 'static>(&self, t: T) -> LockBoxSized<T> {
         println!("test running with moderator {:?}", self);
         match self {
             ModeratorKind::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),

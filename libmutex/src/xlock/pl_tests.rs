@@ -19,7 +19,7 @@ struct NonCopy(i32);
 #[test]
 fn smoke() {
     for moderator in MODERATOR_KINDS {
-        let l = moderator.lock_for_test(0);
+        let l = moderator.make_lock_for_test(0);
         drop(l.read());
         drop(l.write());
         drop(l.read().upgrade());
@@ -35,7 +35,7 @@ fn frob() {
         const N: u32 = 10;
         const M: u32 = 1000;
 
-        let r = Arc::new(moderator.lock_for_test(()));
+        let r = Arc::new(moderator.make_lock_for_test(()));
 
         let (tx, rx) = channel::<()>();
         for _ in 0..N {
@@ -91,7 +91,7 @@ fn frob() {
 #[test]
 fn test_rw_arc_no_poison_wr() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(1));
+        let arc = Arc::new(moderator.make_lock_for_test(1));
         let arc2 = arc.clone();
         let _ = thread::spawn(move || {
             let _lock = arc2.write();
@@ -107,7 +107,7 @@ fn test_rw_arc_no_poison_wr() {
 #[test]
 fn test_rw_arc_with_chalice() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(Chalice::new(1)));
+        let arc = Arc::new(moderator.make_lock_for_test(Chalice::new(1)));
         let arc2 = arc.clone();
         let _ = thread::spawn(move || {
             let mut lock = arc2.write();
@@ -125,7 +125,7 @@ fn test_rw_arc_with_chalice() {
 #[test]
 fn test_rw_arc_no_poison_ww() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(1));
+        let arc = Arc::new(moderator.make_lock_for_test(1));
         let arc2 = arc.clone();
         let _: Result<(), _> = thread::spawn(move || {
             let _lock = arc2.write();
@@ -140,7 +140,7 @@ fn test_rw_arc_no_poison_ww() {
 #[test]
 fn test_rw_arc_no_poison_rr() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(1));
+        let arc = Arc::new(moderator.make_lock_for_test(1));
         let arc2 = arc.clone();
         let _: Result<(), _> = thread::spawn(move || {
             let _lock = arc2.read();
@@ -155,7 +155,7 @@ fn test_rw_arc_no_poison_rr() {
 #[test]
 fn test_rw_arc_no_poison_rw() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(1));
+        let arc = Arc::new(moderator.make_lock_for_test(1));
         let arc2 = arc.clone();
         let _: Result<(), _> = thread::spawn(move || {
             let _lock = arc2.read();
@@ -172,7 +172,7 @@ fn test_rw_arc_no_poison_rw() {
 #[test]
 fn test_ruw_arc() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(0i32));
+        let arc = Arc::new(moderator.make_lock_for_test(0i32));
         let arc2 = arc.clone();
         let (tx, rx) = channel();
 
@@ -244,7 +244,7 @@ fn test_ruw_arc() {
 #[test]
 fn test_rw_arc() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(0));
+        let arc = Arc::new(moderator.make_lock_for_test(0));
         let arc2 = arc.clone();
         let (tx, rx) = channel();
 
@@ -284,7 +284,7 @@ fn test_rw_arc() {
 #[test]
 fn test_rw_arc_access_in_unwind() {
     for moderator in MODERATOR_KINDS {
-        let arc = Arc::new(moderator.lock_for_test(1));
+        let arc = Arc::new(moderator.make_lock_for_test(1));
         let _ = {
             let arc = arc.clone();
             thread::spawn(move || {
@@ -322,7 +322,7 @@ fn test_rwlock_unsized() {
 #[test]
 fn test_rwlock_try_read() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0isize);
+        let lock = moderator.make_lock_for_test(0isize);
         {
             let read_guard = lock.read();
 
@@ -362,7 +362,7 @@ fn test_rwlock_try_read() {
 #[test]
 fn test_rwlock_try_write() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0isize);
+        let lock = moderator.make_lock_for_test(0isize);
         {
             let read_guard = lock.read();
 
@@ -404,7 +404,7 @@ fn test_rwlock_try_write() {
 #[test]
 fn test_rwlock_try_upgrade() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0isize);
+        let lock = moderator.make_lock_for_test(0isize);
         {
             let read_guard = lock.read();
 
@@ -420,7 +420,7 @@ fn test_rwlock_try_upgrade() {
 #[test]
 fn test_into_inner() {
     for moderator in MODERATOR_KINDS {
-        let m = moderator.lock_for_test(NonCopy(10));
+        let m = moderator.make_lock_for_test(NonCopy(10));
         assert_eq!(m.into_inner(), NonCopy(10));
     }
 }
@@ -435,7 +435,7 @@ fn test_into_inner_drop() {
             }
         }
         let num_drops = Arc::new(AtomicUsize::new(0));
-        let m = moderator.lock_for_test(Foo(num_drops.clone()));
+        let m = moderator.make_lock_for_test(Foo(num_drops.clone()));
         assert_eq!(num_drops.load(Ordering::SeqCst), 0);
         {
             let _inner = m.into_inner();
@@ -448,7 +448,7 @@ fn test_into_inner_drop() {
 #[test]
 fn test_get_mut() {
     for moderator in MODERATOR_KINDS {
-        let mut m = moderator.lock_for_test(NonCopy(10));
+        let mut m = moderator.make_lock_for_test(NonCopy(10));
         *m.get_mut() = NonCopy(20);
         assert_eq!(m.into_inner(), NonCopy(20));
     }
@@ -466,7 +466,7 @@ fn test_rwlockguard_sync() {
 #[test]
 fn test_rwlock_downgrade() {
     for moderator in MODERATOR_KINDS {
-        let x = Arc::new(moderator.lock_for_test(0));
+        let x = Arc::new(moderator.make_lock_for_test(0));
         let mut handles = Vec::new();
         for _ in 0..8 {
             let x = x.clone();

@@ -11,7 +11,7 @@ use crate::xlock::locklike::MODERATOR_KINDS;
 #[test]
 fn read_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
 
         for _ in 0..3 {
             let guard = lock.read();
@@ -25,7 +25,7 @@ fn read_release_cycle() {
 #[test]
 fn read_upgrade_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let cycles = 3;
         for i in 0..cycles {
             let guard = lock.read();
@@ -41,7 +41,7 @@ fn read_upgrade_release_cycle() {
 #[test]
 fn read_upgrade_downgrade_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let cycles = 3;
         for i in 0..cycles {
             let guard = lock.read();
@@ -59,7 +59,7 @@ fn read_upgrade_downgrade_release_cycle() {
 #[test]
 fn write_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let cycles = 3;
         for i in 0..cycles {
             let mut guard = lock.write();
@@ -73,7 +73,7 @@ fn write_release_cycle() {
 #[test]
 fn write_downgrade_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let cycles = 3;
         for i in 0..cycles {
             let mut guard = lock.write();
@@ -89,7 +89,7 @@ fn write_downgrade_release_cycle() {
 #[test]
 fn write_downgrade_upgrade_release_cycle() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let cycles = 3;
         for i in 0..cycles {
             let mut guard = lock.write();
@@ -108,7 +108,7 @@ fn write_downgrade_upgrade_release_cycle() {
 #[test]
 fn read_acquire_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let guard_1 = lock.read();
         let guard_2 = lock.read();
         drop(guard_1);
@@ -119,7 +119,7 @@ fn read_acquire_while_read_locked() {
 #[test]
 fn timeout_on_write_acquire_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let guard_1 = lock.read();
         let guard_2_res = lock.try_write(SHORT_WAIT);
         assert!(guard_2_res.is_none());
@@ -134,7 +134,7 @@ fn timeout_on_write_acquire_while_read_locked() {
 #[test]
 fn timeout_on_upgrade_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let guard_1 = lock.read();
         let guard_2 = lock.read();
         let guard_2_res = guard_2.try_upgrade(SHORT_WAIT);
@@ -152,7 +152,7 @@ fn timeout_on_upgrade_while_read_locked() {
 #[test]
 fn timeout_on_write_acquire_while_write_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let guard_1 = lock.write();
         let guard_2_res = lock.try_write(SHORT_WAIT);
         assert!(guard_2_res.is_none());
@@ -167,7 +167,7 @@ fn timeout_on_write_acquire_while_write_locked() {
 #[test]
 fn timeout_on_read_acquire_while_write_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = moderator.lock_for_test(0);
+        let lock = moderator.make_lock_for_test(0);
         let guard_1 = lock.write();
         let guard_2_res = lock.try_read(SHORT_WAIT);
         assert!(guard_2_res.is_none());
@@ -182,7 +182,7 @@ fn timeout_on_read_acquire_while_write_locked() {
 #[test]
 fn await_write_acquire_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
 
         let lock_t_2 = lock.clone();
@@ -202,7 +202,7 @@ fn await_write_acquire_while_read_locked() {
 #[test]
 fn await_write_acquire_while_locked_by_several_readers() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
         let guard_2 = lock.read();
 
@@ -227,7 +227,7 @@ fn await_write_acquire_while_locked_by_several_readers() {
 #[test]
 fn await_upgrade_acquire_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
 
         let lock_t_2 = lock.clone();
@@ -249,7 +249,7 @@ fn await_upgrade_acquire_while_read_locked() {
 #[test]
 fn await_upgrade_acquire_while_locked_by_several_readers() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
         let guard_2 = lock.read();
 
@@ -276,7 +276,7 @@ fn await_upgrade_acquire_while_locked_by_several_readers() {
 #[test]
 fn await_read_acquire_while_write_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.write();
 
         let lock_t_2 = lock.clone();
@@ -296,7 +296,7 @@ fn await_read_acquire_while_write_locked() {
 #[test]
 fn await_read_acquire_while_write_locked_with_downgrade() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.write();
 
         let lock_t_2 = lock.clone();
@@ -317,7 +317,7 @@ fn await_read_acquire_while_write_locked_with_downgrade() {
 #[test]
 fn competing_read_acquire_and_upgrade_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
         println!("main: read-acquired");
 
@@ -404,7 +404,7 @@ fn competing_read_acquire_and_upgrade_while_read_locked() {
 #[test]
 fn competing_multiple_write_acquire_while_read_locked() {
     for moderator in MODERATOR_KINDS {
-        let lock = Arc::new(moderator.lock_for_test(0));
+        let lock = Arc::new(moderator.make_lock_for_test(0));
         let guard_1 = lock.read();
         println!("main: read-acquired");
 

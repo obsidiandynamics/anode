@@ -68,6 +68,11 @@ impl Moderator for WriteBiased {
         let mut self_writer_pending = false;
         let mut state = utils::remedy(sync.state.lock());
         while state.readers != 0 || state.writer {
+            if !state.writer_pending {
+                self_writer_pending = true;
+                state.writer_pending = true;
+            }
+
             let (mut guard, timed_out) =
                 utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
@@ -78,10 +83,6 @@ impl Moderator for WriteBiased {
                     sync.cond.notify_all();
                 }
                 return false;
-            }
-            if !guard.writer_pending {
-                self_writer_pending = true;
-                guard.writer_pending = true;
             }
             state = guard;
         }
@@ -148,3 +149,6 @@ impl Moderator for WriteBiased {
         true
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -143,3 +143,6 @@ impl Moderator for ArrivalOrdered {
         true
     }
 }
+
+#[cfg(test)]
+mod tests;

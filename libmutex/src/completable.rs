@@ -29,7 +29,7 @@ impl<T> Outcome<T> {
 
     #[inline]
     pub fn is_success(&self) -> bool {
-        matches!(self, Outcome::Abort)
+        matches!(self, Outcome::Success(_))
     }
 
     #[inline]

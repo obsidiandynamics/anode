@@ -1,13 +1,14 @@
 use crate::multilock::Fairness;
+use crate::utils::remedy;
+use crate::xlock::locklike::LockBox;
+use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{fmt, thread};
-use crate::xlock::locklike::{LockBox};
-use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 
 // Constants used for waiting in tests.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
@@ -155,5 +156,16 @@ impl Addable for String {
     fn add(&self, amount: i64) -> Self {
         let current = self.get();
         (current + amount).to_string()
+    }
+}
+
+pub fn spin_wait_for<T>(mutex: &Mutex<T>, mut predicate: impl FnMut(&T) -> bool) {
+    const MAX_WAITS_BEFORE_YIELDING: u16 = 10;
+    let mut waits = 0;
+    while !predicate(&*remedy(mutex.lock())) {
+        if waits > MAX_WAITS_BEFORE_YIELDING {
+            thread::yield_now();
+        }
+        waits += 1;
     }
 }
