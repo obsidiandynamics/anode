@@ -165,7 +165,8 @@ pub fn spin_wait_for<T>(mutex: &Mutex<T>, mut predicate: impl FnMut(&T) -> bool)
     while !predicate(&*remedy(mutex.lock())) {
         if waits > MAX_WAITS_BEFORE_YIELDING {
             thread::yield_now();
+        } else {
+            waits += 1;
         }
-        waits += 1;
     }
 }
