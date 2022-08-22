@@ -15,7 +15,6 @@ pub const SHORT_WAIT: Duration = Duration::from_micros(1);
 pub const LONG_WAIT: Duration = Duration::from_secs(10);
 pub const CHECK_WAIT: Duration = Duration::from_millis(5);
 
-//TODO
 pub const FAIRNESS_VARIANTS: [FairnessVariant; 3] = [
     FairnessVariant(Fairness::ReadBiased),
     FairnessVariant(Fairness::WriteBiased),
@@ -28,17 +27,6 @@ impl From<FairnessVariant> for Fairness {
     fn from(fv: FairnessVariant) -> Self {
         println!("test running with fairness {:?}", fv.0);
         fv.0
-    }
-}
-
-impl FairnessVariant {
-    pub fn make_lock<T: Sync + Send + 'static>(&self, t: T) -> LockBox<T> {
-        println!("test running with fairness {:?}", self.0);
-        match self.0 {
-            Fairness::ReadBiased => Box::new(XLock::<_, ReadBiased>::new(t)),
-            Fairness::WriteBiased => Box::new(XLock::<_, WriteBiased>::new(t)),
-            Fairness::ArrivalOrdered => Box::new(XLock::<_, ArrivalOrdered>::new(t)),
-        }
     }
 }
 

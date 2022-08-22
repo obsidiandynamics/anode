@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 use crate::test_utils::{Addable, BoxedInt};
-use crate::xlock::locklike::{LockBoxSized, MODERATOR_KINDS};
+use crate::xlock::locklike::{LockBoxSized, MODERATOR_KINDS, PolyLock};
 use crate::xlock::{ArrivalOrdered, Faulty, LockReadGuard, LockUpgradeOutcome, LockWriteGuard, ReadBiased, Moderator, WriteBiased, XLock};
 
 #[test]
@@ -13,7 +13,7 @@ fn box_cycle() {
     }
 }
 
-fn __box_cycle(boxed: LockBoxSized<i32>) {
+fn __box_cycle<'a>(boxed: LockBoxSized<'a, i32>) {
     // read -> release
     {
         let guard = boxed.read();
@@ -86,7 +86,7 @@ fn __box_cycle(boxed: LockBoxSized<i32>) {
 #[test]
 fn box_sized_into_inner() {
     let lock = XLock::<_, ReadBiased>::new(42);
-    let boxed: LockBoxSized<_> = Box::new(lock);
+    let boxed: LockBoxSized<_> = Box::new(PolyLock(lock));
     assert_eq!(42, boxed.into_inner());
 }
 

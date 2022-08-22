@@ -1,3 +1,5 @@
+#![feature(generic_associated_types)]
+
 pub mod chalice;
 pub mod completable;
 pub mod deadline;

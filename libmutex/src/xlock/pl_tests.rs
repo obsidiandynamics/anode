@@ -289,7 +289,7 @@ fn test_rw_arc_access_in_unwind() {
             let arc = arc.clone();
             thread::spawn(move || {
                 struct Unwinder {
-                    i: Arc<LockBoxSized<usize>>,
+                    i: Arc<LockBoxSized<'static, usize>>,
                 }
                 impl Drop for Unwinder {
                     fn drop(&mut self) {
