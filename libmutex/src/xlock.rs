@@ -8,12 +8,10 @@ use std::time::Duration;
 mod read_biased;
 mod write_biased;
 mod arrival_ordered;
-mod faulty;
 
 pub use read_biased::ReadBiased;
 pub use write_biased::WriteBiased;
 pub use arrival_ordered::ArrivalOrdered;
-pub use faulty::Faulty;
 
 unsafe impl<T: ?Sized + Send, M: Moderator> Send for XLock<T, M> {}
 unsafe impl<T: ?Sized + Send + Sync, M: Moderator> Sync for XLock<T, M> {}
@@ -277,6 +275,15 @@ impl<W, R> UpgradeOutcome<W, R> {
 }
 
 #[cfg(test)]
+mod faulty;
+
+#[cfg(test)]
+pub use faulty::Faulty;
+
+#[cfg(test)]
+pub mod locklike;
+
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
@@ -284,6 +291,3 @@ mod tr_tests;
 
 #[cfg(test)]
 mod pl_tests;
-
-#[cfg(test)]
-pub mod locklike;
