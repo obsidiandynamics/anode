@@ -4,8 +4,7 @@ pub mod deadline;
 pub mod executor;
 pub mod multilock;
 pub mod xlock;
-
-mod utils;
+pub mod utils;
 
 #[cfg(test)]
 pub mod test_utils;

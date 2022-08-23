@@ -1,8 +1,13 @@
-use libmutex::xlock::{ArrivalOrdered, Moderator, ReadBiased, WriteBiased, XLock};
-use libmutex_bench::quad_harness::{Addable, ExtendedOptions, Options};
+use std::sync::RwLock;
+use libmutex::xlock::ArrivalOrdered;
+use libmutex::xlock::ReadBiased;
+use libmutex::xlock::WriteBiased;
+use libmutex::xlock::XLock;
+use libmutex_bench::quad_harness::{ExtendedOptions, Options};
 use libmutex_bench::{args, quad_harness};
 use std::time::Duration;
 use libmutex_bench::lock_spec::LockSpec;
+use libmutex_bench::quad_harness::print::{Header, Separator};
 
 fn main() {
     let args = args::parse(&["readers", "writers", "downgraders", "upgraders", "duration"]);
@@ -19,22 +24,26 @@ fn main() {
                             upgraders,
                             duration: Duration::from_secs(duration as u64),
                         };
-                        println!("{opts:?}");
-
-                        run("RwLock<ReadBiased>", XLock::<_, ReadBiased>::new(0), opts.clone());
-                        run("RwLock<WriteBiased>", XLock::<_, WriteBiased>::new(0), opts.clone());
-                        run("RwLock<ArrivalOrdered>", XLock::<_, ArrivalOrdered>::new(0), opts.clone());
+                        println!("{}", Separator());
+                        println!("{}", opts);
+                        println!("{}", Header());
+                        run::<XLock::<_, ReadBiased>>("synchrony::rwlock::RwLock<ReadBiased>", &opts);
+                        run::<XLock::<_, WriteBiased>>("synchrony::rwlock::RwLock<WriteBiased>", &opts);
+                        run::<XLock::<_, ArrivalOrdered>>("synchrony::rwlock::RwLock<ArrivalOrdered>", &opts);
+                        run::<RwLock<_>>("std::sync::RwLock", &opts);
                     }
                 }
             }
         }
     }
+    println!("{}", Separator());
 }
 
-fn run<T: Addable, L: for <'a> LockSpec<'a, T=T> + 'static>(name: &str, lock: L, opts: Options) {
+fn run<L: for <'a> LockSpec<'a, T=i64> + 'static>(name: &str, opts: &Options) {
     let ext_opts = ExtendedOptions {
+        // stick your overrides here
         ..ExtendedOptions::default()
     };
-    let result = quad_harness::run(lock, opts, ext_opts);
-    println!("|{:25}| {result}", name);
+    let result = quad_harness::run::<i64, L>(opts, &ext_opts);
+    println!("|{:45}|{result}", name);
 }

@@ -1,13 +1,17 @@
+use crate::lock_spec::{LockSpec, ReadGuardSpec, WriteGuardSpec};
+use libmutex::xlock::UpgradeOutcome;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use libmutex::xlock::UpgradeOutcome;
-use crate::lock_spec::{LockSpec, ReadGuardSpec, WriteGuardSpec};
+
+pub mod print;
 
 pub trait Addable: Send + Sync {
+    fn initial() -> Self;
+
     fn get(&self) -> i64;
 
     fn add(&self, amount: i64) -> Self;
@@ -23,6 +27,10 @@ impl BoxedInt {
 }
 
 impl Addable for BoxedInt {
+    fn initial() -> Self {
+        BoxedInt(Box::new(0))
+    }
+
     fn get(&self) -> i64 {
         *self.0
     }
@@ -34,6 +42,10 @@ impl Addable for BoxedInt {
 }
 
 impl Addable for i64 {
+    fn initial() -> Self {
+        0
+    }
+
     fn get(&self) -> i64 {
         *self
     }
@@ -44,6 +56,10 @@ impl Addable for i64 {
 }
 
 impl Addable for String {
+    fn initial() -> Self {
+        String::from("0")
+    }
+
     fn get(&self) -> i64 {
         self.parse().unwrap()
     }
@@ -126,48 +142,39 @@ impl Rate {
 
 impl Display for Rate {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fn right_align(f: &mut Formatter<'_>, mut data: String) -> std::fmt::Result {
-            if let Some(width) = f.width() {
-                while data.len() < width {
-                    data.insert(0, ' ');
+        let mut unaligned = {
+            if f.alternate() {
+                format!("{:.3} kHz", self.khz())
+            } else {
+                match self.0 {
+                    val if val > 1_000_000.0 => format!("{:.3} MHz", self.mhz()),
+                    val if val > 1_000.0 => format!("{:.3} kHz", self.khz()),
+                    _ => format!("{:.3} Hz", self.hz()),
                 }
             }
-            f.write_str(&data)
-        }
+        };
 
-        if f.alternate() {
-            right_align(f, format!("{:.3} kHz", self.khz()))
-        } else {
-            match self.0 {
-                val if val > 1_000_000.0 => right_align(f, format!("{:.3} MHz", self.mhz())),
-                val if val > 1_000.0 => right_align(f, format!("{:.3} kHz", self.khz())),
-                _ => right_align(f, format!("{:.3} Hz", self.hz())),
+        if let Some(width) = f.width() {
+            while unaligned.len() < width {
+                unaligned.insert(0, ' ');
             }
         }
+        f.write_str(&unaligned)
     }
 }
 
-impl Display for BenchmarkResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let read_rate = self.rate(self.reads);
-        let write_rate = self.rate(self.writes);
-        let downgrade_rate = self.rate(self.downgrades);
-        let upgrade_rate = self.rate(self.upgrades);
-        write!(f, "reads: {:#15}| writes: {:#15}| downgrades: {:#15}| upgrades: {:#15}|",
-               read_rate, write_rate, downgrade_rate, upgrade_rate)
-    }
-}
-
-pub fn run<T: Addable, L: for <'a> LockSpec<'a, T=T> + 'static>(
-    lock: L,
-    opts: Options,
-    ext_opts: ExtendedOptions,
+pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
+    opts: &Options,
+    ext_opts: &ExtendedOptions,
 ) -> BenchmarkResult {
+    let opts = opts.clone();
+    let ext_opts = ext_opts.clone();
+
     let running = Arc::new(AtomicBool::new(true));
     let start_barrier = Arc::new(Barrier::new(
         opts.readers + opts.writers + opts.downgraders + opts.upgraders,
     ));
-    let lock = Arc::new(lock);
+    let lock = Arc::new(L::new(T::initial()));
 
     let time_check_interval = ext_opts.time_check_interval as u64;
     let reader_threads = (0..opts.readers)
@@ -399,7 +406,10 @@ fn spin_yield(yields: u32) {
 }
 
 #[inline]
-fn read_eventually<'a, T, R: ReadGuardSpec<'a, T>, L: LockSpec<'a, T=T, R=R>>(lock: &'a L, duration: Duration) -> R {
+fn read_eventually<'a, T, R: ReadGuardSpec<'a, T>, L: LockSpec<'a, T = T, R = R>>(
+    lock: &'a L,
+    duration: Duration,
+) -> R {
     let mut val = None;
     while val.is_none() {
         val = lock.try_read(duration);
@@ -408,7 +418,7 @@ fn read_eventually<'a, T, R: ReadGuardSpec<'a, T>, L: LockSpec<'a, T=T, R=R>>(lo
 }
 
 #[inline]
-fn write_eventually<'a, T, W: WriteGuardSpec<'a, T>, L: LockSpec<'a, T=T, W=W>>(
+fn write_eventually<'a, T, W: WriteGuardSpec<'a, T>, L: LockSpec<'a, T = T, W = W>>(
     lock: &'a L,
     duration: Duration,
 ) -> W {
