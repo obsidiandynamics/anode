@@ -17,6 +17,18 @@ pub trait Addable: Send + Sync {
     fn add(&self, amount: i64) -> Self;
 }
 
+impl Addable for i64 {
+    fn initial() -> Self { 0 }
+
+    fn get(&self) -> i64 {
+        *self
+    }
+
+    fn add(&self, amount: i64) -> Self {
+        self + amount
+    }
+}
+
 #[derive(Debug)]
 pub struct BoxedInt(Box<i64>);
 
@@ -41,20 +53,6 @@ impl Addable for BoxedInt {
     }
 }
 
-impl Addable for i64 {
-    fn initial() -> Self {
-        0
-    }
-
-    fn get(&self) -> i64 {
-        *self
-    }
-
-    fn add(&self, amount: i64) -> Self {
-        self + amount
-    }
-}
-
 impl Addable for String {
     fn initial() -> Self {
         String::from("0")
@@ -65,8 +63,7 @@ impl Addable for String {
     }
 
     fn add(&self, amount: i64) -> Self {
-        let current = self.get();
-        (current + amount).to_string()
+        (self.get() + amount).to_string()
     }
 }
 

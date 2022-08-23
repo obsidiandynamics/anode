@@ -1,3 +1,4 @@
+use std::any;
 use std::time::Duration;
 use libmutex::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 use libmutex_bench::lock_spec::LockSpec;
@@ -57,5 +58,6 @@ fn __quake_micro_bench<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>() {
         upgraders: 2,
         duration: Duration::from_millis(100),
     };
-    quake_harness::run::<T, L>(&opts, &ExtendedOptions::default());
+    let result = quake_harness::run::<T, L>(&opts, &ExtendedOptions::default());
+    println!("|{:<120}|{}", any::type_name::<L>(), result);
 }
