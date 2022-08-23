@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use crate::xlock::locklike::LockBoxSized;
+use crate::xlock::locklike::LockReadGuardlike;
+use crate::xlock::locklike::LockWriteGuardlike;
 use crate::xlock::locklike::MODERATOR_KINDS;
 use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 use crate::xlock::UpgradeOutcome::Upgraded;
@@ -289,7 +291,7 @@ fn test_rw_arc_access_in_unwind() {
             let arc = arc.clone();
             thread::spawn(move || {
                 struct Unwinder {
-                    i: Arc<LockBoxSized<'static, usize>>,
+                    i: Arc<LockBoxSized<usize>>,
                 }
                 impl Drop for Unwinder {
                     fn drop(&mut self) {

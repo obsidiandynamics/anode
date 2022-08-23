@@ -1,7 +1,5 @@
 use crate::multilock::Fairness;
 use crate::utils::remedy;
-use crate::xlock::locklike::LockBox;
-use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
