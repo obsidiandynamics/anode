@@ -1,4 +1,4 @@
-use std::sync::{Condvar, LockResult, MutexGuard};
+use std::sync::{Condvar, LockResult, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration};
 
 // pub fn unpack<T>(result: LockResult<T>) -> (T, bool) {
@@ -20,6 +20,16 @@ pub fn remedy<T>(result: LockResult<T>) -> T {
     match result {
         Ok(inner) => inner,
         Err(error) => error.into_inner(),
+    }
+}
+
+/// A variant of [`remedy`] for a [`TryLockResult`].
+#[inline(always)]
+pub fn try_remedy<T>(result: TryLockResult<T>) -> Option<T> {
+    match result {
+        Ok(inner) => Some(inner),
+        Err(TryLockError::Poisoned(error)) => Some(error.into_inner()),
+        Err(TryLockError::WouldBlock) => None,
     }
 }
 
