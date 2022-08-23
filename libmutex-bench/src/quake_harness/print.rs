@@ -1,7 +1,7 @@
 //! Printing of options and results for the benchmark.
 
 use std::fmt::{Display, Formatter};
-use crate::quad_harness::{BenchmarkResult, Options};
+use crate::quake_harness::{BenchmarkResult, Options};
 
 impl Display for Options {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -31,15 +31,15 @@ impl Display for BenchmarkResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let read_rate = self.rate(self.reads);
         let write_rate = self.rate(self.writes);
-        let downgrade_rate = self.rate(self.downgrades);
-        let upgrade_rate = self.rate(self.upgrades);
+        let downgrade_rate = self.maybe_rate(self.downgrades);
+        let upgrade_rate = self.maybe_rate(self.upgrades);
         write!(
             f,
-            "{:>20.3}|{:>20.3}|{:>20.3}|{:>20.3}|",
+            "{:>20.3}|{:>20.3}|{:>20}|{:>20}|",
             read_rate.khz(),
             write_rate.khz(),
-            downgrade_rate.khz(),
-            upgrade_rate.khz()
+            downgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate)),
+            upgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate)),
         )
     }
 }

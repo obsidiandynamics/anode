@@ -112,14 +112,18 @@ impl Default for ExtendedOptions {
 pub struct BenchmarkResult {
     pub reads: u64,
     pub writes: u64,
-    pub downgrades: u64,
-    pub upgrades: u64,
+    pub downgrades: Option<u64>,
+    pub upgrades: Option<u64>,
     pub elapsed: Duration,
 }
 
 impl BenchmarkResult {
     pub fn rate(&self, ops: u64) -> Rate {
         Rate(ops as f64 / self.elapsed.as_secs_f64())
+    }
+
+    pub fn maybe_rate(&self, ops: Option<u64>) -> Option<Rate> {
+        ops.map(|ops| self.rate(ops))
     }
 }
 
@@ -170,9 +174,11 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
     let opts = opts.clone();
     let ext_opts = ext_opts.clone();
 
+    let downgraders = if L::supports_downgrade() { opts.downgraders } else { 0 };
+    let upgraders = if L::supports_upgrade() { opts.upgraders } else { 0 };
     let running = Arc::new(AtomicBool::new(true));
     let start_barrier = Arc::new(Barrier::new(
-        opts.readers + opts.writers + opts.downgraders + opts.upgraders,
+        opts.readers + opts.writers + downgraders + upgraders
     ));
     let lock = Arc::new(L::new(T::initial()));
 
@@ -244,7 +250,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
         })
         .collect::<Vec<_>>();
 
-    let downgrader_threads = (0..opts.downgraders)
+    let downgrader_threads = (0..downgraders)
         .map(|i| {
             let running = running.clone();
             let start_barrier = start_barrier.clone();
@@ -288,7 +294,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
         })
         .collect::<Vec<_>>();
 
-    let upgrader_threads = (0..opts.upgraders)
+    let upgrader_threads = (0..upgraders)
         .map(|i| {
             let running = running.clone();
             let start_barrier = start_barrier.clone();
@@ -392,8 +398,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
     BenchmarkResult {
         reads: reader_iterations + upgrader_reads,
         writes: writer_iterations + downgrader_iterations,
-        downgrades: downgrader_iterations,
-        upgrades: upgrader_upgrades,
+        downgrades: if L::supports_downgrade() { Some(downgrader_iterations) } else { None },
+        upgrades: if L::supports_upgrade() { Some(upgrader_upgrades) } else { None },
         elapsed: Instant::now() - start_time,
     }
 }
