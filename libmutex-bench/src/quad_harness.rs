@@ -1,10 +1,11 @@
-use libmutex::xlock::{LockReadGuard, LockUpgradeOutcome, LockWriteGuard, Moderator, XLock};
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use libmutex::xlock::UpgradeOutcome;
+use crate::lock_spec::{LockSpec, ReadGuardSpec, WriteGuardSpec};
 
 pub trait Addable: Send + Sync {
     fn get(&self) -> i64;
@@ -157,8 +158,8 @@ impl Display for BenchmarkResult {
     }
 }
 
-pub fn run<T: Addable + 'static, M: Moderator + 'static>(
-    lock: XLock<T, M>,
+pub fn run<T: Addable, L: for <'a> LockSpec<'a, T=T> + 'static>(
+    lock: L,
     opts: Options,
     ext_opts: ExtendedOptions,
 ) -> BenchmarkResult {
@@ -180,7 +181,7 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                 let mut last_val = 0;
                 while iterations % time_check_interval != 0 || running.load(Ordering::Relaxed) {
                     {
-                        let val = read_eventually(&lock, ext_opts.read_timeout);
+                        let val = read_eventually(&*lock, ext_opts.read_timeout);
                         if ext_opts.debug_locks {
                             println!("reader {i} read-locked");
                         }
@@ -215,7 +216,7 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                 let mut iterations = 0u64;
                 while iterations % time_check_interval != 0 || running.load(Ordering::Relaxed) {
                     {
-                        let mut val = write_eventually(&lock, ext_opts.write_timeout);
+                        let mut val = write_eventually(&*lock, ext_opts.write_timeout);
                         if ext_opts.debug_locks {
                             println!("writer {i} write-locked");
                         }
@@ -247,14 +248,14 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                 let mut last_val = 0;
                 while iterations % time_check_interval != 0 || running.load(Ordering::Relaxed) {
                     {
-                        let mut val = write_eventually(&lock, ext_opts.write_timeout);
+                        let mut val = write_eventually(&*lock, ext_opts.write_timeout);
                         if ext_opts.debug_locks {
                             println!("downgrader {i} write-locked");
                         }
                         spin_yield(ext_opts.yields_inside_critical);
                         *val = val.add(1);
 
-                        let val = val.downgrade();
+                        let val = L::downgrade(val);
                         if ext_opts.debug_locks {
                             println!("downgrader {i} downgraded");
                         }
@@ -292,7 +293,7 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                 let mut missed_upgrades = 0;
                 while iterations % time_check_interval != 0 || running.load(Ordering::Relaxed) {
                     {
-                        let val = read_eventually(&lock, ext_opts.read_timeout);
+                        let val = read_eventually(&*lock, ext_opts.read_timeout);
                         if ext_opts.debug_locks {
                             println!("upgrader {i} read-locked");
                         }
@@ -305,9 +306,9 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                         }
                         last_val = current;
 
-                        let val = val.try_upgrade(ext_opts.upgrade_timeout);
+                        let val = L::try_upgrade(val, ext_opts.upgrade_timeout);
                         match val {
-                            LockUpgradeOutcome::Upgraded(mut val) => {
+                            UpgradeOutcome::Upgraded(mut val) => {
                                 if ext_opts.debug_locks {
                                     println!("upgrader {i} upgraded");
                                 }
@@ -318,7 +319,7 @@ pub fn run<T: Addable + 'static, M: Moderator + 'static>(
                                     println!("upgrader {i} write-unlocked");
                                 }
                             }
-                            LockUpgradeOutcome::Unchanged(_) => {
+                            UpgradeOutcome::Unchanged(_) => {
                                 if ext_opts.debug_locks {
                                     println!("upgrader {i} upgrade timed out");
                                 }
@@ -398,7 +399,7 @@ fn spin_yield(yields: u32) {
 }
 
 #[inline]
-fn read_eventually<T, M: Moderator>(lock: &XLock<T, M>, duration: Duration) -> LockReadGuard<T, M> {
+fn read_eventually<'a, T, R: ReadGuardSpec<'a, T>, L: LockSpec<'a, T=T, R=R>>(lock: &'a L, duration: Duration) -> R {
     let mut val = None;
     while val.is_none() {
         val = lock.try_read(duration);
@@ -407,10 +408,10 @@ fn read_eventually<T, M: Moderator>(lock: &XLock<T, M>, duration: Duration) -> L
 }
 
 #[inline]
-fn write_eventually<T, M: Moderator>(
-    lock: &XLock<T, M>,
+fn write_eventually<'a, T, W: WriteGuardSpec<'a, T>, L: LockSpec<'a, T=T, W=W>>(
+    lock: &'a L,
     duration: Duration,
-) -> LockWriteGuard<T, M> {
+) -> W {
     let mut val = None;
     while val.is_none() {
         val = lock.try_write(duration);
