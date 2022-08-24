@@ -12,17 +12,6 @@ pub type LockBoxSized<T> = Box<
     dyn for<'a> LocklikeSized<'a, T, R = DynLockReadGuard<'a, T>, W = DynLockWriteGuard<'a, T>>,
 >;
 
-// trait Reduce<T: ?Sized> {
-//     fn downcast<'a>(self: &'a Box<Self>) -> &'a LockBox<T>;
-// }
-//
-// impl<T: ?Sized + 'static> Reduce<T> for LockBoxSized<T> {
-//     fn downcast<'a>(self: &'a Box<Self>) -> &'a LockBox<T> {
-//         let a: &'a dyn Any = self;
-//         a.downcast_ref::<LockBox<T>>().unwrap()
-//     }
-// }
-
 pub trait LockReadGuardlike<'a, T: ?Sized>: Deref<Target = T> {
     fn upgrade(self) -> DynLockWriteGuard<'a, T>;
 
@@ -72,44 +61,53 @@ impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for XL
     type R = LockReadGuard<'a, T, M>;
     type W = LockWriteGuard<'a, T, M>;
 
+    #[inline]
     fn read(&'a self) -> Self::R {
         self.read()
     }
 
+    #[inline]
     fn try_read(&'a self, duration: Duration) -> Option<Self::R> {
         self.try_read(duration)
     }
 
+    #[inline]
     fn write(&'a self) -> Self::W {
         self.write()
     }
 
+    #[inline]
     fn try_write(&'a self, duration: Duration) -> Option<Self::W> {
         self.try_write(duration)
     }
 
+    #[inline]
     fn get_mut(&mut self) -> &mut T {
         self.get_mut()
     }
 }
 
 impl<T, M: Moderator> XLock<T, M> {
+    #[inline]
     fn lock_into_inner(self) -> T {
         self.into_inner()
     }
 }
 
 impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LocklikeSized<'a, T> for XLock<T, M> {
+    #[inline]
     fn into_inner(self: Box<Self>) -> T {
         self.lock_into_inner()
     }
 }
 
 impl<'a, T: ?Sized, M: Moderator> LockReadGuardlike<'a, T> for LockReadGuard<'a, T, M> {
+    #[inline]
     fn upgrade(self) -> DynLockWriteGuard<'a, T> {
         self.upgrade().into()
     }
 
+    #[inline]
     fn try_upgrade(
         self,
         duration: Duration,
@@ -120,10 +118,12 @@ impl<'a, T: ?Sized, M: Moderator> LockReadGuardlike<'a, T> for LockReadGuard<'a,
 }
 
 impl<'a, T: ?Sized, M: Moderator> LockReadGuardSurrogate<'a, T> for LockReadGuard<'a, T, M> {
+    #[inline]
     fn upgrade_box(self: Box<Self>) -> DynLockWriteGuard<'a, T> {
         self.upgrade().into()
     }
 
+    #[inline]
     fn try_upgrade_box(
         self: Box<Self>,
         duration: Duration,
@@ -134,12 +134,14 @@ impl<'a, T: ?Sized, M: Moderator> LockReadGuardSurrogate<'a, T> for LockReadGuar
 }
 
 impl<'a, T: ?Sized, M: Moderator> LockWriteGuardlike<'a, T> for LockWriteGuard<'a, T, M> {
+    #[inline]
     fn downgrade(self) -> DynLockReadGuard<'a, T> {
         self.downgrade().into()
     }
 }
 
 impl<'a, T: ?Sized, M: Moderator> LockWriteGuardSurrogate<'a, T> for LockWriteGuard<'a, T, M> {
+    #[inline]
     fn downgrade_box(self: Box<Self>) -> DynLockReadGuard<'a, T> {
         self.downgrade().into()
     }
@@ -151,28 +153,34 @@ impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for Po
     type R = DynLockReadGuard<'a, T>;
     type W = DynLockWriteGuard<'a, T>;
 
+    #[inline]
     fn read(&'a self) -> Self::R {
         self.0.read().into()
     }
 
+    #[inline]
     fn try_read(&'a self, duration: Duration) -> Option<Self::R> {
         self.0.try_read(duration).map(DynLockReadGuard::from)
     }
 
+    #[inline]
     fn write(&'a self) -> Self::W {
         self.0.write().into()
     }
 
+    #[inline]
     fn try_write(&'a self, duration: Duration) -> Option<Self::W> {
         self.0.try_write(duration).map(DynLockWriteGuard::from)
     }
 
+    #[inline]
     fn get_mut(&mut self) -> &mut T {
         self.0.get_mut()
     }
 }
 
 impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LocklikeSized<'a, T> for PolyLock<T, M> {
+    #[inline]
     fn into_inner(self: Box<Self>) -> T {
         self.0.into_inner()
     }
@@ -181,6 +189,7 @@ impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LocklikeSized<'a, T> for PolyLo
 pub struct DynLockReadGuard<'a, T: ?Sized>(Box<dyn LockReadGuardSurrogate<'a, T> + 'a>);
 
 impl<'a, T: ?Sized> DynLockReadGuard<'a, T> {
+    #[inline]
     pub fn try_upgrade(
         self,
         duration: Duration,
@@ -199,10 +208,12 @@ impl<T: ?Sized> Deref for DynLockReadGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> LockReadGuardlike<'a, T> for DynLockReadGuard<'a, T> {
+    #[inline]
     fn upgrade(self) -> DynLockWriteGuard<'a, T> {
         self.0.upgrade_box().into()
     }
 
+    #[inline]
     fn try_upgrade(
         self,
         duration: Duration,
@@ -213,6 +224,7 @@ impl<'a, T: ?Sized> LockReadGuardlike<'a, T> for DynLockReadGuard<'a, T> {
 }
 
 impl<'a, T: ?Sized + 'a, M: Moderator> From<LockReadGuard<'a, T, M>> for DynLockReadGuard<'a, T> {
+    #[inline]
     fn from(guard: LockReadGuard<'a, T, M>) -> Self {
         DynLockReadGuard(Box::new(guard))
     }
@@ -237,12 +249,14 @@ impl<T: ?Sized> DerefMut for DynLockWriteGuard<'_, T> {
 }
 
 impl<'a, T: ?Sized> LockWriteGuardlike<'a, T> for DynLockWriteGuard<'a, T> {
+    #[inline]
     fn downgrade(self) -> DynLockReadGuard<'a, T> {
         self.0.downgrade_box()
     }
 }
 
 impl<'a, T: ?Sized, M: Moderator> From<LockWriteGuard<'a, T, M>> for DynLockWriteGuard<'a, T> {
+    #[inline]
     fn from(guard: LockWriteGuard<'a, T, M>) -> Self {
         DynLockWriteGuard(Box::new(guard))
     }
