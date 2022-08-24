@@ -1,5 +1,5 @@
 use crate::multilock::Fairness;
-use crate::utils::remedy;
+use crate::utils::{Remedy};
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
@@ -148,7 +148,7 @@ impl Addable for String {
 pub fn spin_wait_for<T>(mutex: &Mutex<T>, mut predicate: impl FnMut(&T) -> bool) {
     const MAX_WAITS_BEFORE_YIELDING: u16 = 10;
     let mut waits = 0;
-    while !predicate(&*remedy(mutex.lock())) {
+    while !predicate(&*mutex.lock().remedy()) {
         if waits > MAX_WAITS_BEFORE_YIELDING {
             thread::yield_now();
         } else {

@@ -6,6 +6,7 @@ use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
+use crate::utils::Remedy;
 
 unsafe impl<T: ?Sized + Send> Send for MultiLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for MultiLock<T> {}
@@ -195,7 +196,7 @@ impl<T: ?Sized> MultiLock<T> {
     #[inline]
     pub fn try_read(&self, duration: Duration) -> Option<LockReadGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         let ticket = state.take_ticket();
         let was_writer_pending = state.writer_pending;
         while match self.fairness {
@@ -247,7 +248,7 @@ impl<T: ?Sized> MultiLock<T> {
 
     #[inline]
     fn read_unlock(&self) {
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         state.readers -= 1;
@@ -272,7 +273,7 @@ impl<T: ?Sized> MultiLock<T> {
     pub fn try_write(&self, duration: Duration) -> Option<LockWriteGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         let ticket = state.take_ticket();
         // println!("waiting on {ticket}");
         while match self.fairness {
@@ -344,7 +345,7 @@ impl<T: ?Sized> MultiLock<T> {
 
     #[inline]
     fn write_unlock(&self) {
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.writer = false;
@@ -357,7 +358,7 @@ impl<T: ?Sized> MultiLock<T> {
 
     #[inline]
     fn downgrade(&self) -> LockReadGuard<'_, T> {
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.readers = 1;
@@ -382,7 +383,7 @@ impl<T: ?Sized> MultiLock<T> {
     fn try_upgrade(&self, duration: Duration) -> Option<LockWriteGuard<'_, T>> {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
-        let mut state = utils::remedy(self.state.lock());
+        let mut state = self.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         while state.readers != 1 {

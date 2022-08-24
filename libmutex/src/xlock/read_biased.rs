@@ -2,6 +2,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::utils;
+use crate::utils::Remedy;
 use crate::xlock::Moderator;
 
 #[derive(Debug)]
@@ -33,7 +34,7 @@ impl Moderator for ReadBiased {
     #[inline]
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         while state.writer {
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
@@ -49,7 +50,7 @@ impl Moderator for ReadBiased {
 
     #[inline]
     fn read_unlock(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         state.readers -= 1;
@@ -65,7 +66,7 @@ impl Moderator for ReadBiased {
     #[inline]
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         while state.readers != 0 || state.writer {
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
@@ -81,7 +82,7 @@ impl Moderator for ReadBiased {
 
     #[inline]
     fn write_unlock(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.writer = false;
@@ -90,7 +91,7 @@ impl Moderator for ReadBiased {
     }
 
     fn downgrade(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.readers = 1;
@@ -101,7 +102,7 @@ impl Moderator for ReadBiased {
 
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         while state.readers != 1 {

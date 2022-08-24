@@ -3,6 +3,7 @@ use crate::utils;
 use std::ops::{Deref};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
+use crate::utils::Remedy;
 
 #[derive(Default, Debug)]
 pub struct Completable<T> {
@@ -77,7 +78,7 @@ impl<T> Completable<T> {
     /// Returns `true` if and only if `f` was invoked.
     #[inline]
     pub fn complete_exclusive(&self, f: impl FnOnce() -> T) -> bool {
-        let mut data = utils::remedy(self.data.lock());
+        let mut data = self.data.lock().remedy();
         if data.is_none() {
             *data = Some(f());
             drop(data);
@@ -99,7 +100,7 @@ impl<T> Completable<T> {
 
     #[inline]
     pub fn is_complete(&self) -> bool {
-        utils::remedy(self.data.lock()).is_some()
+        self.data.lock().remedy().is_some()
     }
 
     #[inline]
@@ -125,7 +126,7 @@ impl<T> Completable<T> {
     #[inline]
     fn __try_get(&self, duration: Duration) -> MutexGuard<Option<T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut data = utils::remedy(self.data.lock());
+        let mut data = self.data.lock().remedy();
         while data.is_none() {
             let (guard, timed_out) =
                 utils::cond_wait_remedy(&self.cond, data, deadline.remaining());
@@ -138,7 +139,7 @@ impl<T> Completable<T> {
     }
 
     pub fn into_inner(self) -> Option<T> {
-        utils::remedy(self.data.into_inner())
+        self.data.into_inner().remedy()
     }
 }
 

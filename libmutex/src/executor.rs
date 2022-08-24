@@ -1,10 +1,10 @@
 use crate::completable::{Completable, Outcome};
-use crate::utils;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
+use crate::utils::Remedy;
 
 pub type SubmissionOutcome<G> = Arc<Completable<Outcome<G>>>;
 
@@ -88,7 +88,7 @@ impl ThreadPool {
             .map(|_| {
                 let receiver = receiver.clone();
                 thread::spawn(move || loop {
-                    let receiver = utils::remedy(receiver.lock());
+                    let receiver = receiver.lock().remedy();
                     let task = receiver.recv();
                     drop(receiver);
                     match task {

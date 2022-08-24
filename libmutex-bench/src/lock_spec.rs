@@ -1,7 +1,7 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
-use libmutex::utils;
+use libmutex::utils::Remedy;
 use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
 
 pub trait ReadGuardSpec<'a, T>: Deref<Target = T> {}
@@ -93,17 +93,17 @@ impl<'a, T: Sync + Send + 'a> LockSpec<'a> for RwLock<T> {
 
     fn try_read(&'a self, duration: Duration) -> Option<Self::R> {
         if duration == Duration::MAX {
-            Some(utils::remedy(self.read()))
+            Some(self.read().remedy())
         } else {
-            utils::try_remedy(self.try_read())
+            self.try_read().remedy()
         }
     }
 
     fn try_write(&'a self, duration: Duration) -> Option<Self::W> {
         if duration == Duration::MAX {
-            Some(utils::remedy(self.write()))
+            Some(self.write().remedy())
         } else {
-            utils::try_remedy(self.try_write())
+            self.try_write().remedy()
         }
     }
 

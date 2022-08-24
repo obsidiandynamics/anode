@@ -2,6 +2,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::utils;
+use crate::utils::Remedy;
 use crate::xlock::Moderator;
 
 #[derive(Debug)]
@@ -34,7 +35,7 @@ impl Moderator for WriteBiased {
     #[inline]
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         let was_writer_pending = state.writer_pending;
         while state.writer  || (was_writer_pending && state.writer_pending) {
             let (guard, timed_out) =
@@ -51,7 +52,7 @@ impl Moderator for WriteBiased {
 
     #[inline]
     fn read_unlock(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         state.readers -= 1;
@@ -66,7 +67,7 @@ impl Moderator for WriteBiased {
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         while state.readers != 0 || state.writer {
             if !state.writer_pending {
                 self_writer_pending = true;
@@ -96,7 +97,7 @@ impl Moderator for WriteBiased {
 
     #[inline]
     fn write_unlock(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.writer = false;
@@ -105,7 +106,7 @@ impl Moderator for WriteBiased {
     }
 
     fn downgrade(sync: &Self::Sync) {
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers == 0, "readers: {}", state.readers);
         debug_assert!(state.writer);
         state.readers = 1;
@@ -117,7 +118,7 @@ impl Moderator for WriteBiased {
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut self_writer_pending = false;
-        let mut state = utils::remedy(sync.state.lock());
+        let mut state = sync.state.lock().remedy();
         debug_assert!(state.readers > 0, "readers: {}", state.readers);
         debug_assert!(!state.writer);
         while state.readers != 1 {
