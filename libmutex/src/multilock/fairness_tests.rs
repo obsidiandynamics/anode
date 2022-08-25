@@ -3,6 +3,7 @@ use crate::multilock::{Fairness, MultiLock};
 use crate::test_utils;
 
 #[test]
+#[ignore]
 fn timeout_in_write_unblocks_readers() {
     let lock = MultiLock::new(0, Fairness::WriteBiased);
     let guard_1 = lock.read();
@@ -21,6 +22,7 @@ fn timeout_in_write_unblocks_readers() {
 
 
 #[test]
+#[ignore]
 fn timeout_in_upgrade_unblocks_readers() {
     let lock = MultiLock::new(0, Fairness::WriteBiased);
     let guard_1 = lock.read();

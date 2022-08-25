@@ -4,6 +4,7 @@ use crate::completable::Outcome;
 use crate::executor::{Executor, Queue, ThreadPool};
 
 #[test]
+#[ignore]
 fn unbounded_execute_tasks_via_submit() {
     const THREADS: RangeInclusive<u16> = 1..=10;
     const TASKS: u16 = 100;
@@ -21,6 +22,7 @@ fn unbounded_execute_tasks_via_submit() {
 }
 
 #[test]
+#[ignore]
 fn bounded_execute_tasks_via_submit() {
     const THREADS: RangeInclusive<u16> = 1..=10;
     const TASKS: u16 = 100;
@@ -117,6 +119,7 @@ fn unbounded_abort_from_submitter() {
 }
 
 #[test]
+#[ignore]
 fn unbounded_abort_from_executor() {
     let pool = ThreadPool::new(1, Queue::Unbounded);
     let start_task_1 = Arc::new(Barrier::new(2));
@@ -155,6 +158,7 @@ fn unbounded_abort_from_executor() {
 }
 
 #[test]
+#[ignore]
 fn bounded_queuing() {
     let pool = ThreadPool::new(1, Queue::Bounded(1));
     let start_task_1 = Arc::new(Barrier::new(2));

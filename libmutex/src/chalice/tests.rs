@@ -6,6 +6,7 @@ use super::*;
 use crate::test_utils::UnwindableRefCell;
 
 #[test]
+#[ignore]
 fn chalice_unsized() {
     let ref_chalice: &Chalice<dyn Display> = &Chalice::new("test");
     let ref_dyn_display = ref_chalice.borrow().either();
@@ -13,6 +14,7 @@ fn chalice_unsized() {
 }
 
 #[test]
+#[ignore]
 fn borrow_unpoisoned() {
     let chalice = Chalice::new(42);
     assert!(!chalice.is_poisoned());
@@ -23,6 +25,7 @@ fn borrow_unpoisoned() {
 }
 
 #[test]
+#[ignore]
 fn borrow_mut_unpoisoned() {
     let mut chalice = Chalice::new(42);
     assert!(!chalice.is_poisoned());
@@ -43,6 +46,7 @@ fn borrow_mut_unpoisoned() {
 }
 
 #[test]
+#[ignore]
 fn borrow_poisoned_same_thread_via_mutex() {
     let chalice_mux = Mutex::new(Chalice::new(42));
     let result = panic::catch_unwind(|| {
@@ -78,6 +82,7 @@ fn borrow_poisoned_same_thread_via_mutex() {
 }
 
 #[test]
+#[ignore]
 fn borrow_poisoned_same_thread() {
     let mut chalice = Chalice::new(42);
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
@@ -121,6 +126,7 @@ fn borrow_poisoned_same_thread() {
 }
 
 #[test]
+#[ignore]
 fn borrow_poisoned_same_thread_via_refcell() {
     let chalice_rc = UnwindableRefCell::new(Chalice::new(42));
     let result = panic::catch_unwind(|| {
@@ -155,6 +161,7 @@ fn borrow_poisoned_same_thread_via_refcell() {
 }
 
 #[test]
+#[ignore]
 fn borrow_poisoned_different_thread() {
     let chalice_mux = Arc::new(Mutex::new(Chalice::new(42)));
     let chalice_mux_clone = chalice_mux.clone();

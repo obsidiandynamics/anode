@@ -4,6 +4,7 @@ use crate::completable::{Completable};
 use crate::test_utils::SHORT_WAIT;
 
 #[test]
+#[ignore]
 fn complete_later() {
     let comp = Completable::default();
     assert!(!comp.is_complete());
@@ -23,6 +24,7 @@ fn complete_later() {
 }
 
 #[test]
+#[ignore]
 fn complete_at_init() {
     let comp = Completable::new(42);
     assert!(comp.is_complete());
@@ -39,6 +41,7 @@ fn complete_at_init() {
 }
 
 #[test]
+#[ignore]
 fn await_complete() {
     let comp = Arc::new(Completable::default());
 
@@ -64,6 +67,7 @@ fn await_complete() {
 }
 
 #[test]
+#[ignore]
 fn complete_exclusive() {
     let comp = Completable::default();
 
@@ -85,6 +89,7 @@ fn complete_exclusive() {
 }
 
 #[test]
+#[ignore]
 fn completable_is_sync() {
     fn sync<T: Sync>(_: T) {}
 
