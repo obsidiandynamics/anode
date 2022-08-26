@@ -80,3 +80,17 @@ fn await_release() {
         assert_eq!(69, *guard_3);
     }
 }
+
+
+#[test]
+fn debug() {
+    let lock = SpinLock::new(5);
+    println!("{:?}", lock);
+    assert!(format!("{:?}", lock).contains("SpinLock"));
+    assert!(format!("{:?}", lock).contains("5"));
+
+    let guard = lock.lock();
+    println!("{:?}", lock);
+    assert!(format!("{:?}", lock).contains("<locked>"));
+    drop(guard);
+}

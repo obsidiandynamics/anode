@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,7 +8,6 @@ unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for SpinLock<T> {}
 unsafe impl<T: ?Sized + Sync> Sync for SpinGuard<'_, T> {}
 
-#[derive(Debug)]
 pub struct SpinLock<T: ?Sized> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
@@ -89,6 +89,27 @@ impl<T: ?Sized> SpinLock<T> {
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         self.data.get_mut()
+    }
+}
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinLock<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("SpinLock");
+        match self.try_lock() {
+            None => {
+                struct LockedPlaceholder;
+                impl fmt::Debug for LockedPlaceholder {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str("<locked>")
+                    }
+                }
+                d.field("data", &LockedPlaceholder);
+            }
+            Some(guard) => {
+                d.field("data", &&*guard);
+            }
+        }
+        d.finish_non_exhaustive()
     }
 }
 
