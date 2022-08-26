@@ -3,6 +3,7 @@ pub mod completable;
 pub mod deadline;
 pub mod executor;
 pub mod multilock;
+pub mod monitor;
 pub mod spinlock;
 pub mod utils;
 pub mod xlock;
