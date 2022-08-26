@@ -290,4 +290,4 @@ mod tests;
 mod tr_tests;
 
 #[cfg(test)]
-mod pl_tests;
+mod std_tests;

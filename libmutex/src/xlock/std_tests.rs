@@ -1,4 +1,4 @@
-//! A test suite "borrowed" from [`parking_lot`](https://github.com/Amanieu/parking_lot).
+//! A test suite "borrowed" the [standard library](https://github.com/rust-lang/rust/blob/master/library/std/src/sync/rwlock/tests.rs).
 
 use crate::chalice::{Chalice, ChaliceResultExt};
 use crate::test_utils::{SHORT_WAIT};
