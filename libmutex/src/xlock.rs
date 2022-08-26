@@ -1,4 +1,5 @@
 use std::cell::UnsafeCell;
+use std::fmt;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -36,7 +37,6 @@ pub trait Moderator: Debug {
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool;
 }
 
-#[derive(Debug)]
 pub struct XLock<T: ?Sized, M: Moderator> {
     sync: M::Sync,
     data: UnsafeCell<T>,
@@ -145,7 +145,7 @@ impl<T: ?Sized, M: Moderator> XLock<T, M> {
     }
 }
 
-pub struct LockReadGuard<'a, T: ?Sized, M: Moderator> {
+pub struct LockReadGuard<'a, T: ?Sized + 'a, M: Moderator + 'a> {
     data: NonNull<T>,
     lock: &'a XLock<T, M>,
     locked: bool,
@@ -191,7 +191,7 @@ impl<T: ?Sized, M: Moderator> Deref for LockReadGuard<'_, T, M> {
     }
 }
 
-pub struct LockWriteGuard<'a, T: ?Sized, M: Moderator> {
+pub struct LockWriteGuard<'a, T: ?Sized + 'a, M: Moderator + 'a> {
     lock: &'a XLock<T, M>,
     locked: bool,
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
@@ -271,6 +271,27 @@ impl<W, R> UpgradeOutcome<W, R> {
             UpgradeOutcome::Upgraded(w) => UpgradeOutcome::Upgraded(f_w(w)),
             UpgradeOutcome::Unchanged(r) => UpgradeOutcome::Unchanged(f_r(r)),
         }
+    }
+}
+
+impl<T: ?Sized + fmt::Debug, M: Moderator> fmt::Debug for XLock<T, M> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("XLock");
+        match self.try_read(Duration::ZERO) {
+            None => {
+                struct LockedPlaceholder;
+                impl fmt::Debug for LockedPlaceholder {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str("<locked>")
+                    }
+                }
+                d.field("data", &LockedPlaceholder);
+            }
+            Some(guard) => {
+                d.field("data", &&*guard);
+            }
+        }
+        d.finish_non_exhaustive()
     }
 }
 

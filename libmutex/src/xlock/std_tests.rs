@@ -12,7 +12,7 @@ use crate::xlock::locklike::LockBoxSized;
 use crate::xlock::locklike::LockReadGuardlike;
 use crate::xlock::locklike::LockWriteGuardlike;
 use crate::xlock::locklike::MODERATOR_KINDS;
-use crate::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
+use crate::xlock::{ReadBiased, WriteBiased, XLock};
 use crate::xlock::UpgradeOutcome::Upgraded;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -169,7 +169,7 @@ fn test_rw_arc_no_poison_rw() {
     }
 }
 
-/// This test had to be modified from its `parking_lot` predecessor to account for the possibility
+/// This test had to be modified from the original to account for the possibility
 /// of failed upgrades.
 #[test]
 fn test_ruw_arc() {
@@ -401,7 +401,7 @@ fn test_rwlock_try_write() {
     }
 }
 
-/// Heavily cut down version from `parking_lot` because we don't support an exclusive upgradeable
+/// Heavily cut down version from the original because we don't support an exclusive upgradeable
 /// reader.
 #[test]
 fn test_rwlock_try_upgrade() {
@@ -491,32 +491,13 @@ fn test_rwlock_downgrade() {
 
 #[test]
 fn test_rwlock_debug() {
-    let x = XLock::<_, WriteBiased>::new(());
-    assert!(format!("{:?}", x).contains("XLock"));
-}
+    let lock = XLock::<_, WriteBiased>::new(5);
+    println!("{:?}", lock);
+    assert!(format!("{:?}", lock).contains("XLock"));
+    assert!(format!("{:?}", lock).contains("5"));
 
-/// Impacts parking_lot when deadlock detection is in force. Shouldn't apply to us, but added
-/// here for completeness.
-#[test]
-fn test_issue_203() {
-    struct Bar(XLock<(), ArrivalOrdered>);
-
-    impl Drop for Bar {
-        fn drop(&mut self) {
-            let _n = self.0.write();
-        }
-    }
-
-    thread_local! {
-        static B: Bar = Bar(XLock::new(()));
-    }
-
-    thread::spawn(|| {
-        B.with(|_| ());
-
-        let a = XLock::<_, ArrivalOrdered>::new(());
-        let _a = a.read();
-    })
-    .join()
-    .unwrap();
+    let guard = lock.write();
+    println!("{:?}", lock);
+    assert!(format!("{:?}", lock).contains("<locked>"));
+    drop(guard);
 }

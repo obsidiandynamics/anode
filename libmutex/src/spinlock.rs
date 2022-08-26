@@ -94,3 +94,6 @@ impl<T: ?Sized> SpinLock<T> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod std_tests;
