@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
+use std::ops::Range;
 use std::time::Duration;
-use rand::thread_rng;
+use rand::{Rng, thread_rng};
 use crate::deadline::Deadline;
-use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, Spin, Wait};
+use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, RandomDuration, Spin, Wait};
 
 #[test]
 fn spin_once_on_elapsed_deadline() {
@@ -74,16 +75,22 @@ fn exp_backoff() {
     assert_eq!(Some(ExpBackoffAction::Yield), it.next());
     assert_eq!(Some(ExpBackoffAction::Yield), it.next());
     assert_eq!(Some(ExpBackoffAction::Yield), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(1))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(2))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(4))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(8))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(16))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(30))), it.next());
-    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(30))), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(1).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(2).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(4).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(8).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(16).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(30).into())), it.next());
+    assert_eq!(Some(ExpBackoffAction::Sleep(Duration::from_micros(30).into())), it.next());
 
     let mut it = eb.into_iter();
     assert_eq!(Some(ExpBackoffAction::Nop), it.next());
+}
+
+impl<R: Rng> RandomDuration for R {
+    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+        self.gen_range(range)
+    }
 }
 
 #[test]
@@ -91,5 +98,5 @@ fn exp_backoff_act() {
     let randomness = || thread_rng();
     ExpBackoffAction::Nop.act(randomness);
     ExpBackoffAction::Yield.act(randomness);
-    ExpBackoffAction::Sleep(Duration::from_micros(10)).act(randomness);
+    ExpBackoffAction::Sleep(Duration::from_micros(10).into()).act(randomness);
 }

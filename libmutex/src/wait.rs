@@ -3,7 +3,6 @@ use std::cmp::{Ordering};
 use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
-use rand::Rng;
 
 pub type WaitResult = Result<(), ()>;
 
@@ -136,19 +135,24 @@ pub struct ExpBackoffIter {
 pub enum ExpBackoffAction {
     Nop,
     Yield,
-    Sleep(Duration),
+    Sleep(NonzeroDuration),
+}
+
+/// Randomly chooses a duration from a range.
+pub trait RandomDuration {
+    fn gen_range(&mut self, range: Range<Duration>) -> Duration;
 }
 
 impl ExpBackoffAction {
     #[inline(always)]
-    pub fn act<R, D>(&self, randomness: D) where R: Rng, D: FnOnce() -> R {
+    pub fn act<R, D>(&self, randomness: D) where R: RandomDuration, D: FnOnce() -> R {
         match self {
             ExpBackoffAction::Nop => (),
             ExpBackoffAction::Yield => thread::yield_now(),
             ExpBackoffAction::Sleep(duration) => {
                 let range = Range {
                     start: Duration::ZERO,
-                    end: *duration,
+                    end: (*duration).into(),
                 };
                 let mut rng = randomness();
                 thread::sleep(rng.gen_range(range));
@@ -174,7 +178,7 @@ impl Iterator for ExpBackoffIter {
         let current_sleep = self.current_sleep;
         let new_sleep = self.current_sleep * 2;
         self.current_sleep = if new_sleep <= self.max_sleep { new_sleep } else { self.max_sleep };
-        Some(ExpBackoffAction::Sleep(current_sleep))
+        Some(ExpBackoffAction::Sleep(NonzeroDuration(current_sleep)))
     }
 }
 
