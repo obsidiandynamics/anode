@@ -1,7 +1,11 @@
+use std::cmp::Ordering;
 use std::sync::{Arc, Barrier};
 use std::time::Duration;
 use crate::executor::{Executor, Queue, ThreadPool};
-use crate::test_utils;
+use crate::test_utils::LONG_WAIT;
+use crate::utils::Remedy;
+use crate::wait;
+use crate::wait::{Wait, WaitResult};
 use crate::xlock::{ArrivalOrdered, XLock};
 
 #[test]
@@ -33,7 +37,7 @@ fn interleaving_writer_blocks_reader() {
     };
 
     // t_2 will block trying to acquire a write lock; it should increase the next_ticket count
-    wait_for_next_ticket(&lock, 3);
+    lock.wait_for_next_ticket(Ordering::is_ge, 3, LONG_WAIT).unwrap();
 
     // the serviced_ticket count should remain
     assert_eq!(1, lock.sync.state.lock().unwrap().serviced_tickets);
@@ -86,7 +90,7 @@ fn queuing_order() {
     };
 
     // t_2 will block trying to acquire a write lock; it should increase the next_ticket count
-    wait_for_next_ticket(&lock, 3);
+    lock.wait_for_next_ticket(Ordering::is_ge, 3, LONG_WAIT).unwrap();
     assert_eq!(1, lock.sync.state.lock().unwrap().serviced_tickets);
 
     let t_3_read = {
@@ -97,7 +101,7 @@ fn queuing_order() {
     };
 
     // t_3 will block trying to acquire a read lock; it should increase the next_ticket count
-    wait_for_next_ticket(&lock, 4);
+    lock.wait_for_next_ticket(Ordering::is_ge, 4, LONG_WAIT).unwrap();
     assert_eq!(1, lock.sync.state.lock().unwrap().serviced_tickets);
 
     let t_4_read_release = Arc::new(Barrier::new(2));
@@ -112,7 +116,7 @@ fn queuing_order() {
     };
 
     // t_4 will block trying to acquire a read lock; it should increase the next_ticket count
-    wait_for_next_ticket(&lock, 5);
+    lock.wait_for_next_ticket(Ordering::is_ge, 5, LONG_WAIT).unwrap();
     assert_eq!(1, lock.sync.state.lock().unwrap().serviced_tickets);
 
     let t_5_write = {
@@ -123,7 +127,7 @@ fn queuing_order() {
     };
 
     // t_5 will block trying to acquire a read lock; it should increase the next_ticket count
-    wait_for_next_ticket(&lock, 6);
+    lock.wait_for_next_ticket(Ordering::is_ge, 6, LONG_WAIT).unwrap();
     assert_eq!(1, lock.sync.state.lock().unwrap().serviced_tickets);
 
     // t_2-5 are definitely blocked
@@ -158,6 +162,8 @@ fn queuing_order() {
     assert_eq!(5, lock.sync.state.lock().unwrap().serviced_tickets);
 }
 
-fn wait_for_next_ticket<T>(lock: &XLock<T, ArrivalOrdered>, min_ticket_value: u64) {
-    test_utils::spin_wait_for(&lock.sync.state, |state| state.next_ticket >= min_ticket_value)
+impl<T> XLock<T, ArrivalOrdered> {
+    fn wait_for_next_ticket(&self, cmp: impl FnMut(Ordering) -> bool, target: u64, duration: Duration) -> WaitResult {
+        wait::Spin::wait_for_inequality(|| self.sync.state.lock().remedy().next_ticket, cmp, &target, duration)
+    }
 }

@@ -1,12 +1,15 @@
 use crate::multilock::Fairness;
-use crate::utils::{Remedy};
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
-use std::sync::{Arc, Barrier, Mutex};
+use std::sync::{Arc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{fmt, thread};
+use std::sync::atomic::{AtomicBool, Ordering};
+use crate::deadline::Deadline;
+use crate::wait;
+use crate::wait::Wait;
 
 // Constants used for waiting in tests.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
@@ -61,7 +64,7 @@ impl<T> RefUnwindSafe for UnwindableRefCell<T> {}
 /// Useful for _probabilistically_ testing code where a thread will start off by blocking
 /// on something, and we want to verify that the thread is, indeed, blocked. This function
 /// only guarantees that the closure has begun executing; it doesn't guarantee
-/// that the thread has blocked. Nonetheless, by the time `spawn_blocked` returns,
+/// that the thread has blocked. Nonetheless, by the time [`spawn_blocked`] returns,
 /// its highly likely that the thread entered the blocked state. It saves us having to
 /// add a [`thread::sleep`].
 ///
@@ -79,13 +82,15 @@ where
     F: Send + 'static,
     T: Send + 'static,
 {
-    let barrier = Arc::new(Barrier::new(2));
-    let _barrier = barrier.clone();
-    let thread = thread::spawn(move || {
-        _barrier.wait();
-        f()
-    });
-    barrier.wait();
+    let started = Arc::new(AtomicBool::new(false));
+    let thread = {
+        let started = started.clone();
+        thread::spawn(move || {
+            started.store(true, Ordering::Relaxed);
+            f()
+        })
+    };
+    wait::Spin::wait_until(|| started.load(Ordering::Relaxed), Deadline::Forever).unwrap();
     thread
 }
 
@@ -142,17 +147,5 @@ impl Addable for String {
     fn add(&self, amount: i64) -> Self {
         let current = self.get();
         (current + amount).to_string()
-    }
-}
-
-pub fn spin_wait_for<T>(mutex: &Mutex<T>, mut predicate: impl FnMut(&T) -> bool) {
-    const MAX_WAITS_BEFORE_YIELDING: u16 = 10;
-    let mut waits = 0;
-    while !predicate(&*mutex.lock().remedy()) {
-        if waits > MAX_WAITS_BEFORE_YIELDING {
-            thread::yield_now();
-        } else {
-            waits += 1;
-        }
     }
 }

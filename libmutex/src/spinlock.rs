@@ -1,5 +1,5 @@
 use std::cell::UnsafeCell;
-use std::fmt;
+use std::{fmt, hint};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,16 +58,23 @@ impl<'a, T: ?Sized> DerefMut for SpinGuard<'a, T> {
 impl<T: ?Sized> SpinLock<T> {
     #[inline]
     pub fn lock(&self) -> SpinGuard<T> {
-        let mut guard = None;
-        while guard.is_none() {
-            guard = self.try_lock();
+        // a [TTAS](https://en.wikipedia.org/wiki/Test_and_test-and-set) implementation that does not result in
+        // continuous cache line invalidation
+        loop {
+            match self.try_lock() {
+                None => {
+                    while self.locked.load(Ordering::Relaxed) {
+                        hint::spin_loop()
+                    }
+                }
+                Some(guard) => return guard,
+            }
         }
-        guard.unwrap()
     }
 
     #[inline]
     pub fn try_lock(&self) -> Option<SpinGuard<T>> {
-        if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+        if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire).is_ok() {
             Some(SpinGuard {
                 lock: self,
                 __no_send: PhantomData::default()

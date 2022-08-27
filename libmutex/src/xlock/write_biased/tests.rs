@@ -1,8 +1,12 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use test_utils::SHORT_WAIT;
 use crate::executor::{Executor, Queue, ThreadPool};
-use crate::test_utils;
+use crate::{test_utils, wait};
+use crate::test_utils::LONG_WAIT;
+use crate::utils::Remedy;
+use crate::wait::{Wait, WaitResult};
 use crate::xlock::{WriteBiased, XLock};
 
 #[test]
@@ -62,7 +66,7 @@ fn await_pending_writer() {
     assert!(!t_2_write.is_complete());
 
     // wait until we are sure that t_2 has raised the writer_pending flag
-    wait_for_writer_pending_flag(&lock);
+    lock.wait_for_writer_pending_flag(true, LONG_WAIT).unwrap();
 
     // try-read a second time from main; should fail, since there is a pending writer
     println!("main waiting for read #2");
@@ -113,6 +117,8 @@ fn await_pending_writer_timeout() {
     drop(guard_1);
 }
 
-fn wait_for_writer_pending_flag<T>(lock: &XLock<T, WriteBiased>) {
-    test_utils::spin_wait_for(&lock.sync.state, |state| state.writer_pending)
+impl<T> XLock<T, WriteBiased> {
+    fn wait_for_writer_pending_flag(&self, target: bool, duration: Duration) -> WaitResult {
+        wait::Spin::wait_for_inequality(|| self.sync.state.lock().remedy().writer_pending, Ordering::is_eq, &target, duration)
+    }
 }

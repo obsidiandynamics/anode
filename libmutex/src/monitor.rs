@@ -1,7 +1,7 @@
 use crate::spinlock::SpinLock;
 use crate::utils;
 use crate::utils::Remedy;
-use std::sync::{Condvar, Mutex, MutexGuard};
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 pub trait Monitor<S> {
@@ -11,6 +11,8 @@ pub trait Monitor<S> {
 pub enum Directive {
     Return,
     Wait(Duration),
+    NotifyOne,
+    NotifyAll
 }
 
 struct Tracker<S> {
@@ -35,13 +37,22 @@ impl<S> SpeculativeMonitor<S> {
             cond: Default::default(),
         }
     }
+
+    pub fn num_waiting(&self) -> u32 {
+        self.tracker.lock().waiting
+    }
 }
 
 impl<S> Monitor<S> for SpeculativeMonitor<S> {
     fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
-        let mut mutex_guard: Option<MutexGuard<()>> = None;
+        let mut mutex_guard = None;
+        let mut woken = false;
         loop {
             let mut spin_guard = self.tracker.lock();
+            if woken {
+                woken = false;
+                spin_guard.waiting -= 1;
+            }
             let data = &mut spin_guard.data;
             let directive = f(data);
             match directive {
@@ -51,6 +62,7 @@ impl<S> Monitor<S> for SpeculativeMonitor<S> {
                 Directive::Wait(duration) => {
                     match mutex_guard.take() {
                         None => {
+                            // println!("init lock");
                             mutex_guard = Some(self.mutex.lock().remedy());
                         }
                         Some(guard) => {
@@ -60,54 +72,48 @@ impl<S> Monitor<S> for SpeculativeMonitor<S> {
                             let (guard, timed_out) =
                                 utils::cond_wait_remedy(&self.cond, guard, duration);
 
-                            let mut spin_guard = self.tracker.lock();
-                            spin_guard.waiting -= 1;
-                            drop(spin_guard);
-
                             if timed_out {
+                                // println!("timed out");
+                                let mut spin_guard = self.tracker.lock();
+                                spin_guard.waiting -= 1;
                                 return;
                             } else {
+                                // println!("keep going");
                                 mutex_guard = Some(guard);
+                                woken = true;
                             }
                         }
+                    }
+                }
+                Directive::NotifyOne | Directive::NotifyAll => {
+                    if spin_guard.waiting > 0 {
+                        drop(spin_guard);
+                        match mutex_guard.take() {
+                            None => {
+                                // println!("init lock");
+                                mutex_guard = Some(self.mutex.lock().remedy());
+                            }
+                            Some(guard) => {
+                                drop(guard);
+                                match directive {
+                                    Directive::NotifyOne => {
+                                        self.cond.notify_one();
+                                    }
+                                    Directive::NotifyAll => {
+                                        self.cond.notify_all();
+                                    }
+                                    _ => unreachable!()
+                                }
+                                return;
+                            }
+                        }
+                    } else {
+                        return;
                     }
                 }
             }
         }
     }
-
-    // fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
-    //     let mut slow = false;
-    //     let mut mutex_guard = None;
-    //     loop {
-    //         mutex_guard = if slow && mutex_guard.is_none() { Some(self.mutex.lock().remedy()) } else { None };
-    //         let mut spin_guard = self.tracker.lock();
-    //         let data = &mut spin_guard.data;
-    //         let directive = f(data);
-    //         match directive {
-    //             Directive::Return => { return; }
-    //             Directive::Wait(duration) => {
-    //                 spin_guard.waiting += 1;
-    //                 drop(spin_guard);
-    //                 if slow {
-    //                     let guard = mutex_guard.take().unwrap();
-    //                     let (guard, timed_out) = utils::cond_wait_remedy(&self.cond, guard, duration);
-    //                     let mut spin_guard = self.tracker.lock();
-    //                     spin_guard.waiting -= 1;
-    //                     drop(spin_guard);
-    //
-    //                     if timed_out {
-    //                         return;
-    //                     } else {
-    //                         mutex_guard = Some(guard);
-    //                     }
-    //                 } else {
-    //                     slow = true;
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 #[cfg(test)]
