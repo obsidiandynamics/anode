@@ -208,8 +208,6 @@ fn wait_for_notify_twice() {
     }
 }
 
-
-
 #[test]
 fn wait_for_notify_all() {
     for _ in 0..10 {
