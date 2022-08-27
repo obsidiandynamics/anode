@@ -6,5 +6,5 @@ while [ true ]; do
   #cargo test --release -- --test-threads 1
   #cargo test -p libmutex --lib -- --test-threads 1
   #cargo test --release
-  cargo test -p libmutex --lib
+  RUST_BACKTRACE=1 cargo test -p libmutex --lib
 done
