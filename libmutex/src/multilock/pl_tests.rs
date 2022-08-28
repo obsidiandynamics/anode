@@ -30,8 +30,8 @@ fn smoke() {
 #[test]
 fn frob() {
     for fairness in FAIRNESS_VARIANTS {
-        const N: u32 = 10;
-        const M: u32 = 1000;
+        const N: u32 = 10; //TODO
+        const M: u32 = 1000; //TODO
 
         let r = Arc::new(MultiLock::new((), fairness.into()));
 

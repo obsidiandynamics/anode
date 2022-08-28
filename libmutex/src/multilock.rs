@@ -1,10 +1,8 @@
 use crate::deadline::Deadline;
 use crate::utils;
-use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::ptr::NonNull;
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 
 unsafe impl<T: ?Sized + Send> Send for MultiLock<T> {}
@@ -13,9 +11,8 @@ unsafe impl<T: ?Sized + Sync> Sync for LockReadGuard<'_, T> {}
 unsafe impl<T: ?Sized + Sync> Sync for LockWriteGuard<'_, T> {}
 
 pub struct LockReadGuard<'a, T: ?Sized> {
-    data: NonNull<T>,
+    data: Option<RwLockReadGuard<'a, T>>,
     lock: &'a MultiLock<T>,
-    locked: bool,
 
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
@@ -24,7 +21,7 @@ pub struct LockReadGuard<'a, T: ?Sized> {
 impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        if self.locked {
+        if let Some(_) = self.data.take() {
             self.lock.read_unlock();
         }
     }
@@ -33,18 +30,19 @@ impl<T: ?Sized> Drop for LockReadGuard<'_, T> {
 impl<'a, T: ?Sized> LockReadGuard<'a, T> {
     #[inline]
     pub fn upgrade(mut self) -> LockWriteGuard<'a, T> {
-        self.locked = false;
+        self.data = None;
         self.lock.upgrade()
     }
 
     #[inline]
     pub fn try_upgrade(mut self, duration: Duration) -> UpgradeOutcome<'a, T> {
+        self.data = None;
         match self.lock.try_upgrade(duration) {
-            None => UpgradeOutcome::Unchanged(self),
-            Some(guard) => {
-                self.locked = false;
-                UpgradeOutcome::Upgraded(guard)
+            None => {
+                self.data = Some(self.lock.restore_read_guard());
+                UpgradeOutcome::Unchanged(self)
             }
+            Some(guard) => UpgradeOutcome::Upgraded(guard)
         }
     }
 }
@@ -87,13 +85,13 @@ impl<T: ?Sized> Deref for LockReadGuard<'_, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { self.data.as_ref() }
+        self.data.as_ref().unwrap().deref()
     }
 }
 
 pub struct LockWriteGuard<'a, T: ?Sized> {
+    data: Option<RwLockWriteGuard<'a, T>>,
     lock: &'a MultiLock<T>,
-    locked: bool,
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
 }
@@ -101,7 +99,7 @@ pub struct LockWriteGuard<'a, T: ?Sized> {
 impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
     #[inline]
     fn drop(&mut self) {
-        if self.locked {
+        if let Some(_) = self.data.take() {
             self.lock.write_unlock();
         }
     }
@@ -110,7 +108,7 @@ impl<T: ?Sized> Drop for LockWriteGuard<'_, T> {
 impl<'a, T: ?Sized> LockWriteGuard<'a, T> {
     #[inline]
     pub fn downgrade(mut self) -> LockReadGuard<'a, T> {
-        self.locked = false;
+        self.data = None;
         self.lock.downgrade()
     }
 }
@@ -120,14 +118,14 @@ impl<T: ?Sized> Deref for LockWriteGuard<'_, T> {
 
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.data.get() }
+        self.data.as_ref().unwrap().deref()
     }
 }
 
 impl<T: ?Sized> DerefMut for LockWriteGuard<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.lock.data.get() }
+        self.data.as_mut().unwrap().deref_mut()
     }
 }
 
@@ -154,7 +152,7 @@ pub struct MultiLock<T: ?Sized> {
     fairness: Fairness,
     state: Mutex<InternalState>,
     cond: Condvar,
-    data: UnsafeCell<T>,
+    data: RwLock<T>,
 }
 
 #[derive(Debug, Clone)]
@@ -177,12 +175,12 @@ impl<T> MultiLock<T> {
                 serviced_tickets: 0
             }),
             cond: Condvar::new(),
-            data: UnsafeCell::new(t),
+            data: RwLock::new(t),
         }
     }
 
     pub fn into_inner(self) -> T {
-        self.data.into_inner()
+        utils::remedy(self.data.into_inner())
     }
 }
 
@@ -236,11 +234,10 @@ impl<T: ?Sized> MultiLock<T> {
             Fairness::ReadBiased | Fairness::WriteBiased => ()
         }
 
-        let data = unsafe { NonNull::new_unchecked(self.data.get()) };
+        let data = Some(utils::remedy(self.data.read()));
         Some(LockReadGuard {
             data,
             lock: self,
-            locked: true,
             __no_send: PhantomData::default(),
         })
     }
@@ -335,9 +332,10 @@ impl<T: ?Sized> MultiLock<T> {
             Fairness::ReadBiased | Fairness::WriteBiased => ()
         }
 
+        let data = Some(utils::remedy(self.data.write()));
         Some(LockWriteGuard {
+            data,
             lock: self,
-            locked: true,
             __no_send: PhantomData::default(),
         })
     }
@@ -364,11 +362,10 @@ impl<T: ?Sized> MultiLock<T> {
         state.writer = false;
         drop(state);
         self.cond.notify_all();
-        let data = unsafe { NonNull::new_unchecked(self.data.get()) };
+        let data = Some(utils::remedy(self.data.read()));
         LockReadGuard {
             data,
             lock: self,
-            locked: true,
             __no_send: PhantomData::default(),
         }
     }
@@ -424,11 +421,17 @@ impl<T: ?Sized> MultiLock<T> {
         state.writer = true;
         drop(state);
 
+        let data = Some(utils::remedy(self.data.write()));
         Some(LockWriteGuard {
+            data,
             lock: self,
-            locked: true,
             __no_send: PhantomData::default(),
         })
+    }
+
+    #[inline]
+    fn restore_read_guard(&self) -> RwLockReadGuard<'_, T> {
+        utils::remedy(self.data.read())
     }
 
     /// Returns a mutable reference to the underlying data.
@@ -437,7 +440,7 @@ impl<T: ?Sized> MultiLock<T> {
     /// take place---the mutable borrow statically guarantees no locks exist.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
-        self.data.get_mut()
+        utils::remedy(self.data.get_mut())
     }
 }
 
