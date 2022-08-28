@@ -355,7 +355,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
         .collect::<Vec<_>>();
 
     let start_time = Instant::now();
-    {
+
+    if readers + writers + upgraders + downgraders > 0 {
         let running = running.clone();
         thread::spawn(move || {
             thread::sleep(opts.duration);
