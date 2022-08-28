@@ -6,6 +6,7 @@ use libmutex::xlock::XLock;
 use libmutex_bench::quad_harness::{ExtendedOptions, Options};
 use libmutex_bench::{args, quad_harness};
 use std::time::Duration;
+use libmutex::spinlock::SpinLock;
 use libmutex_bench::lock_spec::LockSpec;
 use libmutex_bench::quad_harness::print::{Header, Separator};
 
@@ -30,6 +31,7 @@ fn main() {
                         run::<XLock::<_, ReadBiased>>("synchrony::rwlock::RwLock<ReadBiased>", &opts);
                         run::<XLock::<_, WriteBiased>>("synchrony::rwlock::RwLock<WriteBiased>", &opts);
                         run::<XLock::<_, ArrivalOrdered>>("synchrony::rwlock::RwLock<ArrivalOrdered>", &opts);
+                        run::<SpinLock<_>>("synchrony::spin_mutex::SpinMutex", &opts);
                         run::<RwLock<_>>("std::sync::RwLock", &opts);
                     }
                 }

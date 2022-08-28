@@ -177,7 +177,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
     let upgraders = if L::supports_upgrade() { opts.upgraders } else { 0 };
     let running = Arc::new(AtomicBool::new(true));
     let start_barrier = Arc::new(Barrier::new(
-        opts.readers + opts.writers + downgraders + upgraders
+        readers + writers + downgraders + upgraders
     ));
     let lock = Arc::new(L::new(T::initial()));
 

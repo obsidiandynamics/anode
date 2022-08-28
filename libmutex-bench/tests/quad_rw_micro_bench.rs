@@ -16,7 +16,7 @@ fn quake_micro_bench_read_biased_boxed_int() {
 }
 
 #[test]
-fn quake_micro_bench_read_biased_string() {
+fn quad_micro_bench_read_biased_string() {
     __quake_micro_bench::<String, XLock<_, ReadBiased>>();
 }
 
