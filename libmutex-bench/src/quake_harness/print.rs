@@ -29,17 +29,17 @@ impl Display for Options {
 
 impl Display for BenchmarkResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let read_rate = self.rate(self.reads);
-        let write_rate = self.rate(self.writes);
+        let read_rate = self.maybe_rate(self.reads);
+        let write_rate = self.maybe_rate(self.writes);
         let downgrade_rate = self.maybe_rate(self.downgrades);
         let upgrade_rate = self.maybe_rate(self.upgrades);
         write!(
             f,
-            "{:>20.3}|{:>20.3}|{:>20}|{:>20}|",
-            read_rate.khz(),
-            write_rate.khz(),
-            downgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate)),
-            upgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate)),
+            "{:>20}|{:>20}|{:>20}|{:>20}|",
+            read_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate.khz())),
+            write_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate.khz())),
+            downgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate.khz())),
+            upgrade_rate.map_or(String::from("-"), |rate|format!("{:.3}", rate.khz())),
         )
     }
 }

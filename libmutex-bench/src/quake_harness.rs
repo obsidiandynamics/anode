@@ -107,8 +107,8 @@ impl Default for ExtendedOptions {
 
 #[derive(Debug)]
 pub struct BenchmarkResult {
-    pub reads: u64,
-    pub writes: u64,
+    pub reads: Option<u64>,
+    pub writes: Option<u64>,
     pub downgrades: Option<u64>,
     pub upgrades: Option<u64>,
     pub elapsed: Duration,
@@ -171,6 +171,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
     let opts = opts.clone();
     let ext_opts = ext_opts.clone();
 
+    let readers = if L::supports_read() { opts.readers } else { 0 };
+    let writers = opts.writers;
     let downgraders = if L::supports_downgrade() { opts.downgraders } else { 0 };
     let upgraders = if L::supports_upgrade() { opts.upgraders } else { 0 };
     let running = Arc::new(AtomicBool::new(true));
@@ -180,7 +182,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
     let lock = Arc::new(L::new(T::initial()));
 
     let time_check_interval = ext_opts.time_check_interval as u64;
-    let reader_threads = (0..opts.readers)
+    let reader_threads = (0..readers)
         .map(|i| {
             let running = running.clone();
             let start_barrier = start_barrier.clone();
@@ -216,7 +218,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
         })
         .collect::<Vec<_>>();
 
-    let writer_threads = (0..opts.writers)
+    let writer_threads = (0..writers)
         .map(|i| {
             let running = running.clone();
             let start_barrier = start_barrier.clone();
@@ -393,10 +395,10 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
         });
 
     BenchmarkResult {
-        reads: reader_iterations + upgrader_reads,
-        writes: writer_iterations + downgrader_iterations,
-        downgrades: if L::supports_downgrade() { Some(downgrader_iterations) } else { None },
-        upgrades: if L::supports_upgrade() { Some(upgrader_upgrades) } else { None },
+        reads: if readers > 0 { Some(reader_iterations + upgrader_reads) } else { None },
+        writes: if writers > 0 { Some(writer_iterations + downgrader_iterations) } else { None },
+        downgrades: if downgraders > 0 { Some(downgrader_iterations) } else { None },
+        upgrades: if upgraders > 0 { Some(upgrader_upgrades) } else { None },
         elapsed: Instant::now() - start_time,
     }
 }

@@ -1,8 +1,10 @@
+use libmutex::spinlock::{SpinGuard, SpinLock};
+use libmutex::utils::Remedy;
+use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
-use libmutex::utils::Remedy;
-use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
 
 pub trait ReadGuardSpec<'a, T>: Deref<Target = T> {}
 
@@ -14,6 +16,8 @@ pub trait LockSpec<'a>: Sync + Send {
     type W: WriteGuardSpec<'a, Self::T>;
 
     fn new(t: Self::T) -> Self;
+
+    fn supports_read() -> bool;
 
     fn supports_downgrade() -> bool;
 
@@ -28,6 +32,28 @@ pub trait LockSpec<'a>: Sync + Send {
     fn try_upgrade(guard: Self::R, duration: Duration) -> UpgradeOutcome<Self::W, Self::R>;
 }
 
+pub struct NoReadGuard<T> {
+    __phantom_data: PhantomData<T>,
+}
+
+impl<T> Default for NoReadGuard<T> {
+    fn default() -> Self {
+        Self {
+            __phantom_data: PhantomData::default(),
+        }
+    }
+}
+
+impl<T> Deref for NoReadGuard<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unimplemented!()
+    }
+}
+
+impl<'a, T> ReadGuardSpec<'a, T> for NoReadGuard<T> {}
+
 impl<'a, T, M: Moderator> ReadGuardSpec<'a, T> for LockReadGuard<'a, T, M> {}
 
 impl<'a, T, M: Moderator> WriteGuardSpec<'a, T> for LockWriteGuard<'a, T, M> {}
@@ -39,6 +65,10 @@ impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LockSpec<'a> for XLock<T, M> {
 
     fn new(t: Self::T) -> Self {
         XLock::<_, M>::new(t)
+    }
+
+    fn supports_read() -> bool {
+        true
     }
 
     fn supports_downgrade() -> bool {
@@ -80,7 +110,11 @@ impl<'a, T: Sync + Send + 'a> LockSpec<'a> for RwLock<T> {
     type W = RwLockWriteGuard<'a, T>;
 
     fn new(t: Self::T) -> Self {
-        RwLock::new(t)
+        Self::new(t)
+    }
+
+    fn supports_read() -> bool {
+        true
     }
 
     fn supports_downgrade() -> bool {
@@ -104,6 +138,50 @@ impl<'a, T: Sync + Send + 'a> LockSpec<'a> for RwLock<T> {
             Some(self.write().remedy())
         } else {
             self.try_write().remedy()
+        }
+    }
+
+    fn downgrade(_guard: Self::W) -> Self::R {
+        unimplemented!()
+    }
+
+    fn try_upgrade(_guard: Self::R, _duration: Duration) -> UpgradeOutcome<Self::W, Self::R> {
+        unimplemented!()
+    }
+}
+
+impl<'a, T> WriteGuardSpec<'a, T> for SpinGuard<'a, T> {}
+
+impl<'a, T: Sync + Send + 'a> LockSpec<'a> for SpinLock<T> {
+    type T = T;
+    type R = NoReadGuard<T>;
+    type W = SpinGuard<'a, T>;
+
+    fn new(t: Self::T) -> Self {
+        Self::new(t)
+    }
+
+    fn supports_read() -> bool {
+        false
+    }
+
+    fn supports_downgrade() -> bool {
+        false
+    }
+
+    fn supports_upgrade() -> bool {
+        false
+    }
+
+    fn try_read(&'a self, _duration: Duration) -> Option<Self::R> {
+        unimplemented!()
+    }
+
+    fn try_write(&'a self, duration: Duration) -> Option<Self::W> {
+        if duration == Duration::MAX {
+            Some(self.lock())
+        } else {
+            self.try_lock()
         }
     }
 
