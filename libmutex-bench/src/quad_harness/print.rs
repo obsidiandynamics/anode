@@ -1,7 +1,7 @@
 //! Printing of options and results for the benchmark.
 
 use std::fmt::{Display, Formatter};
-use crate::quake_harness::{BenchmarkResult, Options};
+use crate::quad_harness::{BenchmarkResult, Options};
 
 impl Display for Options {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

@@ -3,11 +3,11 @@ use libmutex::xlock::ArrivalOrdered;
 use libmutex::xlock::ReadBiased;
 use libmutex::xlock::WriteBiased;
 use libmutex::xlock::XLock;
-use libmutex_bench::quake_harness::{ExtendedOptions, Options};
-use libmutex_bench::{args, quake_harness};
+use libmutex_bench::quad_harness::{ExtendedOptions, Options};
+use libmutex_bench::{args, quad_harness};
 use std::time::Duration;
 use libmutex_bench::lock_spec::LockSpec;
-use libmutex_bench::quake_harness::print::{Header, Separator};
+use libmutex_bench::quad_harness::print::{Header, Separator};
 
 fn main() {
     let args = args::parse(&["readers", "writers", "downgraders", "upgraders", "duration"]);
@@ -44,6 +44,6 @@ fn run<L: for <'a> LockSpec<'a, T=i64> + 'static>(name: &str, opts: &Options) {
         // stick your overrides here
         ..ExtendedOptions::default()
     };
-    let result = quake_harness::run::<i64, L>(opts, &ext_opts);
+    let result = quad_harness::run::<i64, L>(opts, &ext_opts);
     println!("|{:45}|{result}", name);
 }
