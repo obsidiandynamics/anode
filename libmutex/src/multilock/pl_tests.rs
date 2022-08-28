@@ -169,73 +169,75 @@ fn test_rw_arc_no_poison_rw() {
 /// of failed upgrades.
 #[test]
 fn test_ruw_arc() {
-    for fairness in FAIRNESS_VARIANTS {
-        let arc = Arc::new(MultiLock::new(0i32, fairness.into()));
-        let arc2 = arc.clone();
-        let (tx, rx) = channel();
+    for _ in 0..1 {
+        for fairness in FAIRNESS_VARIANTS {
+            let arc = Arc::new(MultiLock::new(0i32, fairness.into()));
+            let arc2 = arc.clone();
+            let (tx, rx) = channel();
 
-        // Here, a single writer will increment the value. But in the process of incrementing
-        // the value, the writer will write an interim _invalid_ value: -1. The readers
-        // should never observe a negative value.
-        thread::spawn(move || {
-            for _ in 0..10 {
-                let mut lock = arc2.write();
-                let tmp = *lock;
-                *lock = -1;
-                thread::yield_now();
-                *lock = tmp + 1;
-            }
-            tx.send(()).unwrap();
-        });
-
-        let mut children = Vec::new();
-
-        // Upgradable readers try to catch the writer in the act and also
-        // try to touch the value. They can also write an invalid interim value.
-        // Upgrading may fail, so we need to track the number of timeouts for the
-        // subsequent summing assertion.
-        let missed_upgrades = Arc::new(AtomicU32::new(0));
-        for _ in 0..5 {
-            let arc3 = arc.clone();
-            let missed_upgrades = missed_upgrades.clone();
-            children.push(thread::spawn(move || {
+            // Here, a single writer will increment the value. But in the process of incrementing
+            // the value, the writer will write an interim _invalid_ value: -1. The readers
+            // should never observe a negative value.
+            thread::spawn(move || {
                 for _ in 0..10 {
-                    let lock = arc3.read();
+                    let mut lock = arc2.write();
                     let tmp = *lock;
-                    assert!(tmp >= 0);
+                    *lock = -1;
                     thread::yield_now();
-                    let lock = lock.try_upgrade(SHORT_WAIT);
-                    if let Upgraded(mut lock) = lock {
-                        assert_eq!(tmp, *lock);
-                        *lock = -1;
-                        thread::yield_now();
-                        *lock = tmp + 1;
-                    } else {
-                        missed_upgrades.fetch_add(1, Ordering::Relaxed);
-                    }
+                    *lock = tmp + 1;
                 }
-            }));
-        }
+                tx.send(()).unwrap();
+            });
 
-        // Readers try to catch the writers in the act.
-        for _ in 0..5 {
-            let arc4 = arc.clone();
-            children.push(thread::spawn(move || {
-                let lock = arc4.read();
-                assert!(*lock >= 0);
-            }));
-        }
+            let mut children = Vec::new();
 
-        // Wait for children to pass their asserts
-        for r in children {
-            assert!(r.join().is_ok());
-        }
+            // Upgradable readers try to catch the writer in the act and also
+            // try to touch the value. They can also write an invalid interim value.
+            // Upgrading may fail, so we need to track the number of timeouts for the
+            // subsequent summing assertion.
+            let missed_upgrades = Arc::new(AtomicU32::new(0));
+            for _ in 0..5 {
+                let arc3 = arc.clone();
+                let missed_upgrades = missed_upgrades.clone();
+                children.push(thread::spawn(move || {
+                    for _ in 0..10 {
+                        let lock = arc3.read();
+                        let tmp = *lock;
+                        assert!(tmp >= 0);
+                        thread::yield_now();
+                        let lock = lock.try_upgrade(SHORT_WAIT);
+                        if let Upgraded(mut lock) = lock {
+                            assert_eq!(tmp, *lock);
+                            *lock = -1;
+                            thread::yield_now();
+                            *lock = tmp + 1;
+                        } else {
+                            missed_upgrades.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }));
+            }
 
-        // Wait for writer to finish
-        rx.recv().unwrap();
-        let lock = arc.read();
-        let missed_upgrades = missed_upgrades.load(Ordering::Relaxed);
-        assert_eq!(*lock, 60i32 - (missed_upgrades as i32));
+            // Readers try to catch the writers in the act.
+            for _ in 0..5 {
+                let arc4 = arc.clone();
+                children.push(thread::spawn(move || {
+                    let lock = arc4.read();
+                    assert!(*lock >= 0);
+                }));
+            }
+
+            // Wait for children to pass their asserts
+            for r in children {
+                assert!(r.join().is_ok());
+            }
+
+            // Wait for writer to finish
+            rx.recv().unwrap();
+            let lock = arc.read();
+            let missed_upgrades = missed_upgrades.load(Ordering::Relaxed);
+            assert_eq!(*lock, 60i32 - (missed_upgrades as i32));
+        }
     }
 }
 
