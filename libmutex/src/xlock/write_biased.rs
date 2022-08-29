@@ -1,7 +1,7 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::xlock::{Moderator, XLock};
+use crate::xlock::{Moderator};
 
 #[derive(Debug)]
 pub struct WriteBiased;
@@ -186,17 +186,6 @@ impl Moderator for WriteBiased {
         }
 
         acquired
-    }
-}
-
-impl<T> XLock<T, WriteBiased> {
-    pub fn is_writer_pending(&self) -> bool {
-        let mut writer_pending = false;
-        self.sync.monitor.enter(|state| {
-            writer_pending = state.writer_pending;
-            Directive::Return
-        });
-        writer_pending
     }
 }
 

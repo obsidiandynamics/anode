@@ -1,17 +1,13 @@
-use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
-use crate::remedy;
-use crate::remedy::Remedy;
+use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
 use crate::xlock::Moderator;
 
 #[derive(Debug)]
 pub struct ArrivalOrdered;
 
-#[derive(Debug)]
 pub struct ArrivalOrderedSync {
-    state: Mutex<ArrivalOrderedState>,
-    cond: Condvar
+    monitor: SpeculativeMonitor<ArrivalOrderedState>,
 }
 
 #[derive(Debug)]
@@ -37,111 +33,237 @@ impl Moderator for ArrivalOrdered {
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            state: Mutex::new(ArrivalOrderedState { readers: 0, writer: false, next_ticket: 1, serviced_tickets: 0 }),
-            cond: Condvar::new()
+            monitor: SpeculativeMonitor::new(ArrivalOrderedState { readers: 0, writer: false, next_ticket: 1, serviced_tickets: 0 }),
         }
     }
 
     #[inline]
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = sync.state.lock().remedy();
-        let ticket = state.take_ticket();
-        while state.writer || state.serviced_tickets < ticket - 1 {
-            let (mut guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-
-            if timed_out {
-                guard.serviced_tickets += 1;
-                drop(guard);
-                sync.cond.notify_all();
-                return false
+        let mut acquired = false;
+        let mut ticket = 0;
+        sync.monitor.enter(|state| {
+            if ticket == 0 {
+                ticket = state.take_ticket();
             }
-            state = guard;
+            if !acquired && !state.writer && state.serviced_tickets >= ticket - 1 {
+                acquired = true;
+                state.readers += 1;
+                state.serviced_tickets += 1;
+            }
+
+            if acquired {
+                Directive::NotifyAll
+            } else {
+                Directive::Wait(deadline.remaining())
+            }
+        });
+
+        if !acquired {
+            let mut incremented_serviced = false;
+            sync.monitor.enter(|state| {
+                if !incremented_serviced {
+                    incremented_serviced = true;
+                    state.serviced_tickets += 1;
+                }
+                Directive::NotifyAll
+            })
         }
-        state.serviced_tickets += 1;
-        state.readers += 1;
-        drop(state);
-        sync.cond.notify_all();
-        true
+
+        acquired
+
+        // let mut deadline = Deadline::lazy_after(duration);
+        // let mut state = sync.monitor.lock().remedy();
+        // let ticket = state.take_ticket();
+        // while state.writer || state.serviced_tickets < ticket - 1 {
+        //     let (mut guard, timed_out) =
+        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+        //
+        //     if timed_out {
+        //         guard.serviced_tickets += 1;
+        //         drop(guard);
+        //         sync.cond.notify_all();
+        //         return false
+        //     }
+        //     state = guard;
+        // }
+        // state.serviced_tickets += 1;
+        // state.readers += 1;
+        // drop(state);
+        // sync.cond.notify_all();
+        // true
     }
 
     #[inline]
     fn read_unlock(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        debug_assert!(!state.writer);
-        state.readers -= 1;
-        let readers = state.readers;
-        drop(state);
-        if readers <= 1 {
-            sync.cond.notify_all();
-        }
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers > 0, "readers: {}", state.readers);
+                debug_assert!(!state.writer);
+
+                released = true;
+                state.readers -= 1;
+            }
+
+            match state.readers {
+                0 | 1 => Directive::NotifyAll,
+                _ => Directive::Return
+            }
+        });
+
+        // let mut state = sync.monitor.lock().remedy();
+        // debug_assert!(state.readers > 0, "readers: {}", state.readers);
+        // debug_assert!(!state.writer);
+        // state.readers -= 1;
+        // let readers = state.readers;
+        // drop(state);
+        // if readers <= 1 {
+        //     sync.cond.notify_all();
+        // }
     }
 
     #[inline]
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = sync.state.lock().remedy();
-        let ticket = state.take_ticket();
-        while state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1 {
-            let (mut guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-
-            if timed_out {
-                guard.serviced_tickets += 1;
-                drop(guard);
-                sync.cond.notify_all();
-                return false;
+        let mut acquired = false;
+        let mut ticket = 0;
+        sync.monitor.enter(|state| {
+            if ticket == 0 {
+                ticket = state.take_ticket();
             }
-            state = guard;
+            if !acquired && state.readers == 0 && !state.writer && state.serviced_tickets >= ticket - 1 {
+                acquired = true;
+                state.writer = true;
+                state.serviced_tickets += 1;
+            }
+
+            if acquired {
+                Directive::NotifyAll
+            } else {
+                Directive::Wait(deadline.remaining())
+            }
+        });
+
+        if !acquired {
+            let mut incremented_serviced = false;
+            sync.monitor.enter(|state| {
+                if !incremented_serviced {
+                    incremented_serviced = true;
+                    state.serviced_tickets += 1;
+                }
+                Directive::NotifyAll
+            })
         }
-        state.serviced_tickets += 1;
-        state.writer = true;
-        drop(state);
-        sync.cond.notify_all();
-        true
+
+        acquired
+        // let mut deadline = Deadline::lazy_after(duration);
+        // let mut state = sync.monitor.lock().remedy();
+        // let ticket = state.take_ticket();
+        // while state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1 {
+        //     let (mut guard, timed_out) =
+        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+        //
+        //     if timed_out {
+        //         guard.serviced_tickets += 1;
+        //         drop(guard);
+        //         sync.cond.notify_all();
+        //         return false;
+        //     }
+        //     state = guard;
+        // }
+        // state.serviced_tickets += 1;
+        // state.writer = true;
+        // drop(state);
+        // sync.cond.notify_all();
+        // true
     }
 
     #[inline]
     fn write_unlock(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        debug_assert!(state.writer);
-        state.writer = false;
-        drop(state);
-        sync.cond.notify_all();
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers == 0, "readers: {}", state.readers);
+                debug_assert!(state.writer);
+
+                released = true;
+                state.writer = false;
+            }
+
+            Directive::NotifyAll
+        });
+
+        // let mut state = sync.monitor.lock().remedy();
+        // debug_assert!(state.readers == 0, "readers: {}", state.readers);
+        // debug_assert!(state.writer);
+        // state.writer = false;
+        // drop(state);
+        // sync.cond.notify_all();
     }
 
     fn downgrade(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        debug_assert!(state.writer);
-        state.readers = 1;
-        state.writer = false;
-        drop(state);
-        sync.cond.notify_all();
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers == 0, "readers: {}", state.readers);
+                debug_assert!(state.writer);
+
+                released = true;
+                state.writer = false;
+                state.readers = 1;
+            }
+
+            Directive::NotifyAll
+        });
+
+        // let mut state = sync.monitor.lock().remedy();
+        // debug_assert!(state.readers == 0, "readers: {}", state.readers);
+        // debug_assert!(state.writer);
+        // state.readers = 1;
+        // state.writer = false;
+        // drop(state);
+        // sync.cond.notify_all();
     }
 
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        debug_assert!(!state.writer);
-        while state.readers != 1 {
-            let (guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+        let mut acquired = false;
+        sync.monitor.enter(|state| {
+            if !acquired && state.readers == 1 {
+                debug_assert!(!state.writer);
 
-            if timed_out {
-                return false
+                acquired = true;
+                state.readers = 0;
+                state.writer = true;
             }
-            state = guard;
-            debug_assert!(state.readers > 0, "readers: {}", state.readers);
-            debug_assert!(!state.writer);
-        }
-        state.readers = 0;
-        state.writer = true;
-        true
+
+            if acquired {
+                Directive::Return
+            } else {
+                Directive::Wait(deadline.remaining())
+            }
+        });
+        acquired
+
+        // let mut deadline = Deadline::lazy_after(duration);
+        // let mut state = sync.monitor.lock().remedy();
+        // debug_assert!(state.readers > 0, "readers: {}", state.readers);
+        // debug_assert!(!state.writer);
+        // while state.readers != 1 {
+        //     let (guard, timed_out) =
+        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+        //
+        //     if timed_out {
+        //         return false
+        //     }
+        //     state = guard;
+        //     debug_assert!(state.readers > 0, "readers: {}", state.readers);
+        //     debug_assert!(!state.writer);
+        // }
+        // state.readers = 0;
+        // state.writer = true;
+        // true
     }
 }
 

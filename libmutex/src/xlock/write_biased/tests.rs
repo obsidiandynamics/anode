@@ -4,6 +4,7 @@ use std::time::Duration;
 use test_utils::SHORT_WAIT;
 use crate::executor::{Executor, Queue, ThreadPool};
 use crate::{test_utils, wait};
+use crate::monitor::{Monitor};
 use crate::test_utils::LONG_WAIT;
 use crate::wait::{Wait, WaitResult};
 use crate::xlock::{WriteBiased, XLock};
@@ -117,6 +118,10 @@ fn await_pending_writer_timeout() {
 }
 
 impl<T> XLock<T, WriteBiased> {
+    fn is_writer_pending(&self) -> bool {
+        self.sync.monitor.compute(|state| state.writer_pending)
+    }
+
     fn wait_for_writer_pending_flag(&self, target: bool, duration: Duration) -> WaitResult {
         wait::Spin::wait_for_inequality(|| self.is_writer_pending(), Ordering::is_eq, &target, duration)
     }

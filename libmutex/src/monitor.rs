@@ -4,8 +4,47 @@ use crate::remedy::Remedy;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
-pub trait Monitor<S> {
+pub trait Monitor<S: ?Sized> {
     fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F);
+
+    /// Invokes the given closure exactly once, supplying the encapsulated state for observation.
+    ///
+    /// # Examples
+    /// ```
+    /// use libmutex::monitor::{Monitor, SpeculativeMonitor};
+    /// struct State {
+    ///     foo: u64
+    /// }
+    /// let monitor = SpeculativeMonitor::new(State { foo: 42 });
+    /// let mut foo = None;
+    /// monitor.observe(|state| {
+    ///     foo = Some(state.foo);
+    /// });
+    /// assert_eq!(Some(42), foo);
+    /// ```
+    fn observe<F: FnOnce(&S)>(&self, f: F);
+
+    /// Performs some computation over the encapsulated state. It may be as simple as
+    /// extracting a value.
+    ///
+    /// # Examples
+    /// ```
+    /// use libmutex::monitor::{Monitor, SpeculativeMonitor};
+    /// struct State {
+    ///     foo: u64,
+    ///     bar: u64,
+    /// }
+    /// let monitor = SpeculativeMonitor::new(State { foo: 42, bar: 24 });
+    /// let foo = monitor.compute(|state| state.foo + state.bar);
+    /// assert_eq!(66, foo);
+    /// ```
+    fn compute<T, F: FnOnce(&S) -> T>(&self, f: F) -> T {
+        let mut val = None;
+        self.observe(|state| {
+            val = Some(f(state));
+        });
+        val.unwrap() // guaranteed to be initialised
+    }
 }
 
 pub enum Directive {
@@ -15,18 +54,19 @@ pub enum Directive {
     NotifyAll
 }
 
-struct Tracker<S> {
-    data: S,
+struct Tracker<S: ?Sized> {
     waiting: u32,
+    data: S,
 }
 
-pub struct SpeculativeMonitor<S> {
-    tracker: SpinLock<Tracker<S>>,
+pub struct SpeculativeMonitor<S: ?Sized> {
     mutex: Mutex<()>,
     cond: Condvar,
+    tracker: SpinLock<Tracker<S>>,
 }
 
 impl<S> SpeculativeMonitor<S> {
+    #[inline(always)]
     pub fn new(s: S) -> Self {
         Self {
             tracker: SpinLock::new(Tracker {
@@ -37,13 +77,16 @@ impl<S> SpeculativeMonitor<S> {
             cond: Default::default(),
         }
     }
+}
 
+impl<S: ?Sized> SpeculativeMonitor<S> {
     pub fn num_waiting(&self) -> u32 {
         self.tracker.lock().waiting
     }
 }
 
-impl<S> Monitor<S> for SpeculativeMonitor<S> {
+impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
+    #[inline(always)]
     fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
         let mut mutex_guard = None;
         let mut woken = false;
@@ -114,6 +157,12 @@ impl<S> Monitor<S> for SpeculativeMonitor<S> {
                 }
             }
         }
+    }
+
+    #[inline(always)]
+    fn observe<F: FnOnce(&S)>(&self, f: F) {
+        let spin_guard = self.tracker.lock();
+        f(&spin_guard.data);
     }
 }
 
