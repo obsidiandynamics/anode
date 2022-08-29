@@ -9,6 +9,7 @@ use std::time::Duration;
 mod read_biased;
 mod write_biased;
 mod arrival_ordered;
+mod legacy_read_biased;
 
 pub use read_biased::ReadBiased;
 pub use write_biased::WriteBiased;

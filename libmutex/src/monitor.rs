@@ -63,6 +63,7 @@ impl<S> Monitor<S> for SpeculativeMonitor<S> {
                     match mutex_guard.take() {
                         None => {
                             // println!("init lock");
+                            drop(spin_guard);
                             mutex_guard = Some(self.mutex.lock().remedy());
                         }
                         Some(guard) => {
