@@ -3,9 +3,9 @@ use std::{fmt, hint};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use rand::thread_rng;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
-use crate::wait::{ExpBackoff, NotRandom};
+use crate::wait::{ExpBackoff};
 
 unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for SpinLock<T> {}
@@ -66,16 +66,10 @@ impl<T: ?Sized> SpinLock<T> {
         loop {
             match self.try_lock() {
                 None => {
-                    let mut backoff = ExpBackoff {
-                        spin_iters: 0,
-                        yield_iters: 0,
-                        min_sleep: Duration::from_micros(100).into(),
-                        max_sleep: Duration::from_millis(10).into()
-                    }.into_inf_iter();
-                    // let not_random = NotRandom::default();
+                    let mut backoff = ExpBackoff::sleepy().into_inf_iter();
                     while self.locked.load(Ordering::Relaxed) {
                         hint::spin_loop();
-                        backoff.next().act(|| NotRandom::default())
+                        backoff.next().act(|| thread_rng())
                     }
                 }
                 Some(guard) => return guard,

@@ -1,10 +1,9 @@
 use std::cmp::Ordering;
-use std::ops::Range;
 use std::time::Duration;
-use rand::{Rng, thread_rng};
+use rand::{thread_rng};
 use crate::deadline::Deadline;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
-use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, RandomDuration, Spin, Wait};
+use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, Spin, Wait};
 
 #[test]
 fn spin_once_on_elapsed_deadline() {
@@ -88,11 +87,11 @@ fn exp_backoff() {
     assert_eq!(ExpBackoffAction::Nop, it.next());
 }
 
-impl<R: Rng> RandomDuration for R {
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
-        self.gen_range(range)
-    }
-}
+// impl<R: Rng> RandomDuration for R {
+//     fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+//         self.gen_range(range)
+//     }
+// }
 
 #[test]
 fn exp_backoff_act() {

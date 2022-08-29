@@ -3,7 +3,9 @@ use std::cmp::{Ordering};
 use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
+use rand::Rng;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
+use crate::rand::{Rand64, RandDuration};
 
 pub type WaitResult = Result<(), ()>;
 
@@ -108,6 +110,35 @@ pub struct ExpBackoff {
     pub max_sleep: NonzeroDuration,
 }
 
+impl ExpBackoff {
+    pub fn spinny() -> Self {
+        Self {
+            spin_iters: u64::MAX,
+            yield_iters: 0,
+            min_sleep: NonzeroDuration::default(),
+            max_sleep: NonzeroDuration::default()
+        }
+    }
+
+    pub fn yieldy() -> Self {
+        Self {
+            spin_iters: 0,
+            yield_iters: u64::MAX,
+            min_sleep: NonzeroDuration::default(),
+            max_sleep: NonzeroDuration::default()
+        }
+    }
+
+    pub fn sleepy() -> Self {
+        Self {
+            spin_iters: 0,
+            yield_iters: 0,
+            min_sleep: Duration::from_micros(100).into(),
+            max_sleep: Duration::from_millis(10).into()
+        }
+    }
+}
+
 impl IntoInfIterator for &ExpBackoff {
     type Item = ExpBackoffAction;
     type IntoInfIter = ExpBackoffIter;
@@ -139,30 +170,9 @@ pub enum ExpBackoffAction {
     Sleep(NonzeroDuration),
 }
 
-/// Randomly chooses a duration from a range.
-pub trait RandomDuration {
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration;
-}
-
-pub struct NotRandom;
-
-impl Default for NotRandom {
-    #[inline(always)]
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl RandomDuration for NotRandom {
-    #[inline(always)]
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
-        range.end
-    }
-}
-
 impl ExpBackoffAction {
     #[inline(always)]
-    pub fn act<R, D>(&self, randomness: D) where R: RandomDuration, D: FnOnce() -> R {
+    pub fn act<R, D>(&self, randomness: D) where R: RandDuration, D: FnOnce() -> R {
         match self {
             ExpBackoffAction::Nop => (),
             ExpBackoffAction::Yield => thread::yield_now(),
@@ -196,6 +206,24 @@ impl InfIterator for ExpBackoffIter {
         let new_sleep = self.current_sleep * 2;
         self.current_sleep = if new_sleep <= self.max_sleep { new_sleep } else { self.max_sleep };
         ExpBackoffAction::Sleep(NonzeroDuration(current_sleep))
+    }
+}
+
+
+
+
+// impl<R: Rng> RandomDuration for R {
+//     fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+//         if range.is_empty() {
+//             return range.start
+//         }
+//         self.gen_range(range)
+//     }
+// }
+
+impl<R: Rng> Rand64 for R {
+    fn next_u64(&mut self) -> u64 {
+        self.next_u64()
     }
 }
 
