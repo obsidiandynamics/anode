@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::time::Duration;
 use rand::{Rng, thread_rng};
 use crate::deadline::Deadline;
-use crate::inf_iter::{InfIterator, IntoInfIterator};
+use crate::inf_iterator::{InfIterator, IntoInfIterator};
 use crate::rand::Rand64;
 use crate::wait::{ExpBackoff, ExpBackoffAction, NonzeroDuration, Spin, Wait};
 

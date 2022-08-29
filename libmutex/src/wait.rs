@@ -3,7 +3,7 @@ use std::cmp::{Ordering};
 use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
-use crate::inf_iter::{InfIterator, IntoInfIterator};
+use crate::inf_iterator::{InfIterator, IntoInfIterator};
 use crate::rand::{FIXED_DURATION, RandDuration};
 
 pub type WaitResult = Result<(), ()>;
