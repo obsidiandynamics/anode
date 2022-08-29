@@ -1,17 +1,13 @@
-use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
-use crate::remedy;
-use crate::remedy::Remedy;
-use crate::xlock::Moderator;
+use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
+use crate::xlock::{Moderator, XLock};
 
 #[derive(Debug)]
 pub struct WriteBiased;
 
-#[derive(Debug)]
 pub struct WriteBiasedSync {
-    state: Mutex<WriteBiasedState>,
-    cond: Condvar
+    monitor: SpeculativeMonitor<WriteBiasedState>,
 }
 
 #[derive(Debug)]
@@ -27,127 +23,180 @@ impl Moderator for WriteBiased {
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            state: Mutex::new(WriteBiasedState { readers: 0, writer: false, writer_pending: false }),
-            cond: Condvar::new()
+            monitor: SpeculativeMonitor::new(WriteBiasedState { readers: 0, writer: false, writer_pending: false }),
         }
     }
 
     #[inline]
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut state = sync.state.lock().remedy();
-        let was_writer_pending = state.writer_pending;
-        while state.writer  || (was_writer_pending && state.writer_pending) {
-            let (guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-
-            if timed_out {
-                return false
+        let mut acquired = false;
+        let mut saw_no_pending_writer = false;
+        sync.monitor.enter(|state| {
+            if !state.writer_pending {
+                saw_no_pending_writer = true;
             }
-            state = guard;
-        }
-        state.readers += 1;
-        true
+
+            if !acquired && !state.writer && saw_no_pending_writer {
+                acquired = true;
+                state.readers += 1;
+            }
+
+            if acquired {
+                Directive::Return
+            } else {
+                Directive::Wait(deadline.remaining())
+            }
+        });
+        acquired
     }
 
     #[inline]
     fn read_unlock(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        debug_assert!(!state.writer);
-        state.readers -= 1;
-        let readers = state.readers;
-        drop(state);
-        if readers <= 1 {
-            sync.cond.notify_all();
-        }
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers > 0, "readers: {}", state.readers);
+                debug_assert!(!state.writer);
+
+                released = true;
+                state.readers -= 1;
+            }
+
+            match state.readers {
+                0 | 1 => Directive::NotifyAll,
+                _ => Directive::Return
+            }
+        });
     }
 
     #[inline]
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
+        let mut acquired = false;
         let mut self_writer_pending = false;
-        let mut state = sync.state.lock().remedy();
-        while state.readers != 0 || state.writer {
-            if !state.writer_pending {
-                self_writer_pending = true;
-                state.writer_pending = true;
-            }
-
-            let (mut guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-
-            if timed_out {
-                if self_writer_pending {
-                    guard.writer_pending = false;
-                    drop(guard);
-                    sync.cond.notify_all();
+        sync.monitor.enter(|state| {
+            if !acquired {
+                if state.readers == 0 && !state.writer {
+                    state.writer = true;
+                    acquired = true;
+                } else if !state.writer_pending {
+                    self_writer_pending = true;
+                    state.writer_pending = true;
                 }
-                return false;
             }
-            state = guard;
-        }
+
+            if acquired {
+                Directive::Return
+            } else {
+                Directive::Wait(deadline.remaining())
+            }
+        });
+
         if self_writer_pending {
-            debug_assert!(state.writer_pending);
-            state.writer_pending = false;
+            let mut cleared_writer_pending = false;
+            sync.monitor.enter(|state| {
+                if !cleared_writer_pending {
+                    cleared_writer_pending = true;
+                    state.writer_pending = false;
+                }
+
+                if acquired {
+                    Directive::Return
+                } else {
+                    Directive::NotifyAll
+                }
+            });
         }
-        state.writer = true;
-        true
+
+        acquired
     }
 
     #[inline]
     fn write_unlock(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        debug_assert!(state.writer);
-        state.writer = false;
-        drop(state);
-        sync.cond.notify_all();
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers == 0, "readers: {}", state.readers);
+                debug_assert!(state.writer);
+
+                released = true;
+                state.writer = false;
+            }
+
+            Directive::NotifyAll
+        });
     }
 
     fn downgrade(sync: &Self::Sync) {
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        debug_assert!(state.writer);
-        state.readers = 1;
-        state.writer = false;
-        drop(state);
-        sync.cond.notify_all();
+        let mut released = false;
+        sync.monitor.enter(|state| {
+            if !released {
+                debug_assert!(state.readers == 0, "readers: {}", state.readers);
+                debug_assert!(state.writer);
+
+                released = true;
+                state.writer = false;
+                state.readers = 1;
+            }
+
+            Directive::NotifyAll
+        });
     }
 
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
+        let mut acquired = false;
         let mut self_writer_pending = false;
-        let mut state = sync.state.lock().remedy();
-        debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        debug_assert!(!state.writer);
-        while state.readers != 1 {
-            let (mut guard, timed_out) =
-                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+        sync.monitor.enter(|state| {
+            if !acquired {
+                debug_assert!(!state.writer);
 
-            if timed_out {
-                if self_writer_pending {
-                    guard.writer_pending = false;
-                    drop(guard);
-                    sync.cond.notify_all();
+                if state.readers == 1 {
+                    acquired = true;
+                    state.readers = 0;
+                    state.writer = true;
+                } else if !state.writer_pending {
+                    self_writer_pending = true;
+                    state.writer_pending = true;
                 }
-                return false
             }
-            if !guard.writer_pending {
-                self_writer_pending = true;
-                guard.writer_pending = true;
+
+            if acquired {
+                Directive::Return
+            } else {
+                Directive::Wait(deadline.remaining())
             }
-            state = guard;
-            debug_assert!(state.readers > 0, "readers: {}", state.readers);
-            debug_assert!(!state.writer);
-        }
+        });
+
         if self_writer_pending {
-            debug_assert!(state.writer_pending);
-            state.writer_pending = false;
+            let mut cleared_writer_pending = false;
+            sync.monitor.enter(|state| {
+                if !cleared_writer_pending {
+                    cleared_writer_pending = true;
+                    state.writer_pending = false;
+                }
+
+                if acquired {
+                    Directive::Return
+                } else {
+                    Directive::NotifyAll
+                }
+            });
         }
-        state.readers = 0;
-        state.writer = true;
-        true
+
+        acquired
+    }
+}
+
+impl<T> XLock<T, WriteBiased> {
+    pub fn is_writer_pending(&self) -> bool {
+        let mut writer_pending = false;
+        self.sync.monitor.enter(|state| {
+            writer_pending = state.writer_pending;
+            Directive::Return
+        });
+        writer_pending
     }
 }
 

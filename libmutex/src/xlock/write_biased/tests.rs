@@ -5,7 +5,6 @@ use test_utils::SHORT_WAIT;
 use crate::executor::{Executor, Queue, ThreadPool};
 use crate::{test_utils, wait};
 use crate::test_utils::LONG_WAIT;
-use crate::remedy::Remedy;
 use crate::wait::{Wait, WaitResult};
 use crate::xlock::{WriteBiased, XLock};
 
@@ -20,7 +19,7 @@ fn timeout_in_write_unblocks_readers() {
     assert!(guard_3.is_none());
 
     // the timeout should have cleared the writer_pending flag
-    assert!(!lock.sync.state.lock().unwrap().writer_pending);
+    assert!(!lock.is_writer_pending());
     let guard_4 = lock.read();
     drop(guard_1);
     drop(guard_2);
@@ -38,7 +37,7 @@ fn timeout_in_upgrade_unblocks_readers() {
     assert!(guard_3.is_unchanged());
 
     // the timeout should have cleared the writer_pending flag
-    assert!(!lock.sync.state.lock().unwrap().writer_pending);
+    assert!(!lock.is_writer_pending());
     let guard_4 = lock.read();
     drop(guard_1);
     drop(guard_2);
@@ -81,7 +80,7 @@ fn await_pending_writer() {
     assert!(t_2_write.get().is_success());
 
     // t_2 should have cleared the writer_pending flag
-    assert!(!lock.sync.state.lock().unwrap().writer_pending);
+    assert!(!lock.is_writer_pending());
 
     // acquiring the read lock will succeed
     println!("main waiting for read #3");
@@ -108,7 +107,7 @@ fn await_pending_writer_timeout() {
     assert!(t_2_write.get().is_success());
 
     // after timing out on try_write, t_2 should have cleared the writer_pending flag
-    assert!(!lock.sync.state.lock().unwrap().writer_pending);
+    assert!(!lock.is_writer_pending());
 
     let guard_4 = lock.try_read(Duration::ZERO);
     assert!(guard_4.is_some());
@@ -119,6 +118,6 @@ fn await_pending_writer_timeout() {
 
 impl<T> XLock<T, WriteBiased> {
     fn wait_for_writer_pending_flag(&self, target: bool, duration: Duration) -> WaitResult {
-        wait::Spin::wait_for_inequality(|| self.sync.state.lock().remedy().writer_pending, Ordering::is_eq, &target, duration)
+        wait::Spin::wait_for_inequality(|| self.is_writer_pending(), Ordering::is_eq, &target, duration)
     }
 }

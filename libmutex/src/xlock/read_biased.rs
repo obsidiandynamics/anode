@@ -121,7 +121,6 @@ impl Moderator for ReadBiased {
         let mut acquired = false;
         sync.monitor.enter(|state| {
             if !acquired && state.readers == 1 {
-                debug_assert!(state.readers > 0, "readers: {}", state.readers);
                 debug_assert!(!state.writer);
 
                 acquired = true;
