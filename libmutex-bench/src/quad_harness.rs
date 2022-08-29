@@ -84,6 +84,8 @@ pub struct ExtendedOptions {
     pub upgrade_timeout: Duration,
     pub debug_locks: bool,
     pub debug_exits: bool,
+    pub spin_inside_critical: u32,
+    pub spin_outside_critical: u32,
     pub yields_inside_critical: u32,
     pub yields_outside_critical: u32,
     pub asserts_enabled: bool,
@@ -98,6 +100,8 @@ impl Default for ExtendedOptions {
             upgrade_timeout: Duration::ZERO,
             debug_locks: false,
             debug_exits: false,
+            spin_inside_critical: 0,
+            spin_outside_critical: 0,
             yields_inside_critical: 0,
             yields_outside_critical: 0,
             asserts_enabled: true,
@@ -197,7 +201,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         if ext_opts.debug_locks {
                             println!("reader {i} read-locked");
                         }
-                        spin_yield(ext_opts.yields_inside_critical);
+                        spin_a_while(ext_opts.spin_inside_critical);
+                        yield_a_while(ext_opts.yields_inside_critical);
                         let current = val.get();
                         if ext_opts.asserts_enabled && current < last_val {
                             panic!("error in reader {i}: value went from {last_val} to {current}");
@@ -208,7 +213,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         println!("reader {i} read-unlocked");
                     }
                     iterations += 1;
-                    spin_yield(ext_opts.yields_outside_critical);
+                    spin_a_while(ext_opts.spin_outside_critical);
+                    yield_a_while(ext_opts.yields_outside_critical);
                 }
                 if ext_opts.debug_exits {
                     println!("reader {i} exited");
@@ -232,14 +238,16 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         if ext_opts.debug_locks {
                             println!("writer {i} write-locked");
                         }
-                        spin_yield(ext_opts.yields_inside_critical);
+                        spin_a_while(ext_opts.spin_inside_critical);
+                        yield_a_while(ext_opts.yields_inside_critical);
                         *val = val.add(1);
                     }
                     if ext_opts.debug_locks {
                         println!("writer {i} write-unlocked");
                     }
                     iterations += 1;
-                    spin_yield(ext_opts.yields_outside_critical);
+                    spin_a_while(ext_opts.spin_outside_critical);
+                    yield_a_while(ext_opts.yields_outside_critical);
                 }
                 if ext_opts.debug_exits {
                     println!("downgrader {i} exited");
@@ -264,7 +272,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         if ext_opts.debug_locks {
                             println!("downgrader {i} write-locked");
                         }
-                        spin_yield(ext_opts.yields_inside_critical);
+                        spin_a_while(ext_opts.spin_inside_critical);
+                        yield_a_while(ext_opts.yields_inside_critical);
                         *val = val.add(1);
 
                         let val = L::downgrade(val);
@@ -283,7 +292,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         println!("downgrader {i} read-unlocked");
                     }
                     iterations += 1;
-                    spin_yield(ext_opts.yields_outside_critical);
+                    spin_a_while(ext_opts.spin_outside_critical);
+                    yield_a_while(ext_opts.yields_outside_critical);
                 }
                 if ext_opts.debug_exits {
                     println!("downgrader {i} exited");
@@ -309,7 +319,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         if ext_opts.debug_locks {
                             println!("upgrader {i} read-locked");
                         }
-                        spin_yield(ext_opts.yields_inside_critical);
+                        spin_a_while(ext_opts.spin_inside_critical);
+                        yield_a_while(ext_opts.yields_inside_critical);
                         let current = val.get();
                         if ext_opts.asserts_enabled && current < last_val {
                             panic!(
@@ -324,7 +335,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                                 if ext_opts.debug_locks {
                                     println!("upgrader {i} upgraded");
                                 }
-                                spin_yield(ext_opts.yields_inside_critical);
+                                spin_a_while(ext_opts.spin_inside_critical);
+                                yield_a_while(ext_opts.yields_inside_critical);
                                 *val = val.add(1);
                                 drop(val);
                                 if ext_opts.debug_locks {
@@ -344,7 +356,8 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
                         }
                     }
                     iterations += 1;
-                    spin_yield(ext_opts.yields_outside_critical);
+                    spin_a_while(ext_opts.spin_outside_critical);
+                    yield_a_while(ext_opts.yields_outside_critical);
                 }
                 if ext_opts.debug_exits {
                     println!("upgrader {i} exited");
@@ -405,7 +418,16 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
 }
 
 #[inline]
-fn spin_yield(yields: u32) {
+fn spin_a_while(yields: u32) {
+    let mut val = 1;
+    for i in 0..yields {
+        val += i
+    }
+    assert_ne!(val, 0);
+}
+
+#[inline]
+fn yield_a_while(yields: u32) {
     for _ in 0..yields {
         thread::yield_now();
     }
