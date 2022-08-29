@@ -4,7 +4,7 @@ use rand::{Rng, thread_rng};
 use crate::deadline::Deadline;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
 use crate::rand::Rand64;
-use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, Spin, Wait};
+use crate::wait::{ExpBackoff, ExpBackoffAction, NonzeroDuration, Spin, Wait};
 
 #[test]
 fn spin_once_on_elapsed_deadline() {
@@ -18,25 +18,15 @@ fn spin_once_on_elapsed_deadline() {
 }
 
 #[test]
-fn spin_no_yield() {
+fn spin_a_while() {
+    const MAX_INVOCATIONS: u8 = 10;
     let mut invocations = 0;
     let result = Spin::wait_until(|| {
         invocations += 1;
-        invocations == MAX_WAITS_BEFORE_YIELDING + 1
+        invocations == MAX_INVOCATIONS
     }, Deadline::Forever);
     assert!(result.is_ok());
-    assert_eq!(MAX_WAITS_BEFORE_YIELDING + 1, invocations);
-}
-
-#[test]
-fn spin_with_yield() {
-    let mut invocations = 0;
-    let result = Spin::wait_until(|| {
-        invocations += 1;
-        invocations == MAX_WAITS_BEFORE_YIELDING + 2
-    }, Deadline::Forever);
-    assert!(result.is_ok());
-    assert_eq!(MAX_WAITS_BEFORE_YIELDING + 2, invocations);
+    assert_eq!(MAX_INVOCATIONS, invocations);
 }
 
 #[test]

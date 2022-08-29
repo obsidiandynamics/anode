@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
-use crate::rand::{RandDuration};
+use crate::rand::{FIXED_DURATION, RandDuration};
 
 pub type WaitResult = Result<(), ()>;
 
@@ -45,25 +45,20 @@ pub trait Wait {
 
 pub struct Spin {}
 
-const MAX_WAITS_BEFORE_YIELDING: u16 = 10;
-
 impl Wait for Spin {
     #[inline(always)]
     fn wait_until<C>(mut condition: C, mut deadline: Deadline) -> WaitResult
     where
         C: FnMut() -> bool,
     {
-        let mut waits = 0;
+        let mut rng = FIXED_DURATION;
+        let mut backoff = ExpBackoff::sleepy().into_inf_iter();
         while !condition() {
             if deadline.remaining().is_zero() {
                 return Err(());
             }
             hint::spin_loop();
-            if waits >= MAX_WAITS_BEFORE_YIELDING {
-                thread::yield_now();
-            } else {
-                waits += 1;
-            }
+            backoff.next().act(|| &mut rng);
         }
         Ok(())
     }
@@ -166,7 +161,7 @@ pub struct ExpBackoffIter {
 pub enum ExpBackoffAction {
     Nop,
     Yield,
-    Sleep(NonzeroDuration),
+    Sleep(Duration),
 }
 
 impl ExpBackoffAction {
@@ -178,7 +173,7 @@ impl ExpBackoffAction {
             ExpBackoffAction::Sleep(duration) => {
                 let range = Range {
                     start: Duration::ZERO,
-                    end: (*duration).into(),
+                    end: *duration,
                 };
                 let rng = randomness();
                 thread::sleep(rng.gen_range(range));
@@ -204,27 +199,9 @@ impl InfIterator for ExpBackoffIter {
         let current_sleep = self.current_sleep;
         let new_sleep = self.current_sleep * 2;
         self.current_sleep = if new_sleep <= self.max_sleep { new_sleep } else { self.max_sleep };
-        ExpBackoffAction::Sleep(NonzeroDuration(current_sleep))
+        ExpBackoffAction::Sleep(current_sleep)
     }
 }
-
-
-
-
-// impl<R: Rng> RandomDuration for R {
-//     fn gen_range(&mut self, range: Range<Duration>) -> Duration {
-//         if range.is_empty() {
-//             return range.start
-//         }
-//         self.gen_range(range)
-//     }
-// }
-
-// impl<R: Rng> Rand64 for R {
-//     fn next_u64(&mut self) -> u64 {
-//         self.next_u64()
-//     }
-// }
 
 #[cfg(test)]
 mod tests;
