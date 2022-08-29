@@ -3,7 +3,7 @@ use libmutex::utils::Remedy;
 use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::Duration;
 
 pub trait ReadGuardSpec<'a, T>: Deref<Target = T> {}
@@ -182,6 +182,50 @@ impl<'a, T: Sync + Send + 'a> LockSpec<'a> for SpinLock<T> {
             Some(self.lock())
         } else {
             self.try_lock()
+        }
+    }
+
+    fn downgrade(_guard: Self::W) -> Self::R {
+        unimplemented!()
+    }
+
+    fn try_upgrade(_guard: Self::R, _duration: Duration) -> UpgradeOutcome<Self::W, Self::R> {
+        unimplemented!()
+    }
+}
+
+impl<'a, T> WriteGuardSpec<'a, T> for MutexGuard<'a, T> {}
+
+impl<'a, T: Sync + Send + 'a> LockSpec<'a> for std::sync::Mutex<T> {
+    type T = T;
+    type R = NoReadGuard<T>;
+    type W = MutexGuard<'a, T>;
+
+    fn new(t: Self::T) -> Self {
+        Self::new(t)
+    }
+
+    fn supports_read() -> bool {
+        false
+    }
+
+    fn supports_downgrade() -> bool {
+        false
+    }
+
+    fn supports_upgrade() -> bool {
+        false
+    }
+
+    fn try_read(&'a self, _duration: Duration) -> Option<Self::R> {
+        unimplemented!()
+    }
+
+    fn try_write(&'a self, duration: Duration) -> Option<Self::W> {
+        if duration == Duration::MAX {
+            Some(self.lock().remedy())
+        } else {
+            self.try_lock().remedy()
         }
     }
 
