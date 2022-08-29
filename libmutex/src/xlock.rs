@@ -11,10 +11,14 @@ mod write_biased;
 mod arrival_ordered;
 mod legacy_read_biased;
 mod legacy_write_biased;
+mod legacy_arrival_ordered;
 
 pub use read_biased::ReadBiased;
 pub use write_biased::WriteBiased;
 pub use arrival_ordered::ArrivalOrdered;
+pub use legacy_read_biased::LegacyReadBiased;
+pub use legacy_write_biased::LegacyWriteBiased;
+pub use legacy_arrival_ordered::LegacyArrivalOrdered;
 
 unsafe impl<T: ?Sized + Send, M: Moderator> Send for XLock<T, M> {}
 unsafe impl<T: ?Sized + Send + Sync, M: Moderator> Sync for XLock<T, M> {}

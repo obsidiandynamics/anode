@@ -1,5 +1,5 @@
 use std::sync::{Mutex, RwLock};
-use libmutex::xlock::ArrivalOrdered;
+use libmutex::xlock::{ArrivalOrdered, LegacyReadBiased, LegacyWriteBiased};
 use libmutex::xlock::ReadBiased;
 use libmutex::xlock::WriteBiased;
 use libmutex::xlock::XLock;
@@ -29,7 +29,9 @@ fn main() {
                         println!("{}", opts);
                         println!("{}", Header());
                         run::<XLock::<_, ReadBiased>>("synchrony::rwlock::RwLock<ReadBiased>", &opts);
+                        run::<XLock::<_, LegacyReadBiased>>("synchrony::rwlock::RwLock<LegacyReadBiased>", &opts);
                         run::<XLock::<_, WriteBiased>>("synchrony::rwlock::RwLock<WriteBiased>", &opts);
+                        run::<XLock::<_, LegacyWriteBiased>>("synchrony::rwlock::RwLock<LegacyWriteBiased>", &opts);
                         run::<XLock::<_, ArrivalOrdered>>("synchrony::rwlock::RwLock<ArrivalOrdered>", &opts);
                         run::<SpinLock<_>>("synchrony::spin_mutex::SpinMutex", &opts);
                         run::<RwLock<_>>("std::sync::RwLock", &opts);
