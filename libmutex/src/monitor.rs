@@ -1,6 +1,6 @@
 use crate::spinlock::SpinLock;
-use crate::utils;
-use crate::utils::Remedy;
+use crate::remedy;
+use crate::remedy::Remedy;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
@@ -70,7 +70,7 @@ impl<S> Monitor<S> for SpeculativeMonitor<S> {
                             drop(spin_guard);
 
                             let (guard, timed_out) =
-                                utils::cond_wait_remedy(&self.cond, guard, duration);
+                                remedy::cond_wait_remedy(&self.cond, guard, duration);
 
                             if timed_out {
                                 // println!("timed out");

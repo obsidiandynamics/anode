@@ -4,7 +4,7 @@ use std::sync::mpsc::{Sender, SyncSender, TrySendError};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use crate::utils::Remedy;
+use crate::remedy::Remedy;
 
 pub type SubmissionOutcome<G> = Arc<Completable<Outcome<G>>>;
 

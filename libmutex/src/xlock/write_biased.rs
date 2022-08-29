@@ -1,8 +1,8 @@
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 use crate::deadline::Deadline;
-use crate::utils;
-use crate::utils::Remedy;
+use crate::remedy;
+use crate::remedy::Remedy;
 use crate::xlock::Moderator;
 
 #[derive(Debug)]
@@ -39,7 +39,7 @@ impl Moderator for WriteBiased {
         let was_writer_pending = state.writer_pending;
         while state.writer  || (was_writer_pending && state.writer_pending) {
             let (guard, timed_out) =
-                utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
             if timed_out {
                 return false
@@ -75,7 +75,7 @@ impl Moderator for WriteBiased {
             }
 
             let (mut guard, timed_out) =
-                utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
             if timed_out {
                 if self_writer_pending {
@@ -123,7 +123,7 @@ impl Moderator for WriteBiased {
         debug_assert!(!state.writer);
         while state.readers != 1 {
             let (mut guard, timed_out) =
-                utils::cond_wait_remedy(&sync.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
             if timed_out {
                 if self_writer_pending {

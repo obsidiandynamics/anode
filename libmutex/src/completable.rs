@@ -1,9 +1,9 @@
 use crate::deadline::Deadline;
-use crate::utils;
+use crate::remedy;
 use std::ops::{Deref};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
-use crate::utils::Remedy;
+use crate::remedy::Remedy;
 
 #[derive(Default, Debug)]
 pub struct Completable<T> {
@@ -129,7 +129,7 @@ impl<T> Completable<T> {
         let mut data = self.data.lock().remedy();
         while data.is_none() {
             let (guard, timed_out) =
-                utils::cond_wait_remedy(&self.cond, data, deadline.remaining());
+                remedy::cond_wait_remedy(&self.cond, data, deadline.remaining());
             if timed_out {
                 return guard;
             }

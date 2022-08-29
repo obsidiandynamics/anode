@@ -1,12 +1,12 @@
 use crate::deadline::Deadline;
-use crate::utils;
+use crate::remedy;
 use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
-use crate::utils::Remedy;
+use crate::remedy::Remedy;
 
 unsafe impl<T: ?Sized + Send> Send for MultiLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for MultiLock<T> {}
@@ -205,7 +205,7 @@ impl<T: ?Sized> MultiLock<T> {
             Fairness::ArrivalOrdered => state.writer || state.serviced_tickets < ticket - 1,
         } {
             let (mut guard, timed_out) =
-                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 match &self.fairness {
@@ -281,7 +281,7 @@ impl<T: ?Sized> MultiLock<T> {
             Fairness::ArrivalOrdered => state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1,
         } {
             let (mut guard, timed_out) =
-                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 match &self.fairness {
@@ -388,7 +388,7 @@ impl<T: ?Sized> MultiLock<T> {
         debug_assert!(!state.writer);
         while state.readers != 1 {
             let (mut guard, timed_out) =
-                utils::cond_wait_remedy(&self.cond, state, deadline.remaining());
+                remedy::cond_wait_remedy(&self.cond, state, deadline.remaining());
 
             if timed_out {
                 match &self.fairness {

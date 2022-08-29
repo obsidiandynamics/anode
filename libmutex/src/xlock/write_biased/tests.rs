@@ -5,7 +5,7 @@ use test_utils::SHORT_WAIT;
 use crate::executor::{Executor, Queue, ThreadPool};
 use crate::{test_utils, wait};
 use crate::test_utils::LONG_WAIT;
-use crate::utils::Remedy;
+use crate::remedy::Remedy;
 use crate::wait::{Wait, WaitResult};
 use crate::xlock::{WriteBiased, XLock};
 

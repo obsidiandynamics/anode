@@ -1,5 +1,5 @@
 use libmutex::spinlock::{SpinGuard, SpinLock};
-use libmutex::utils::Remedy;
+use libmutex::remedy::Remedy;
 use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};

@@ -3,7 +3,7 @@ use std::sync::{Arc, Barrier};
 use std::time::Duration;
 use crate::executor::{Executor, Queue, ThreadPool};
 use crate::test_utils::LONG_WAIT;
-use crate::utils::Remedy;
+use crate::remedy::Remedy;
 use crate::wait;
 use crate::wait::{Wait, WaitResult};
 use crate::xlock::{ArrivalOrdered, XLock};
