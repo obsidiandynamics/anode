@@ -3,9 +3,9 @@ use std::{fmt, hint};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::backoff::ExpBackoff;
 use crate::inf_iterator::{InfIterator, IntoInfIterator};
 use crate::rand::{*, LazyRand64, Xorshift};
-use crate::wait::{ExpBackoff};
 
 unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for SpinLock<T> {}

@@ -11,7 +11,7 @@ use crate::deadline::Deadline;
 use crate::wait;
 use crate::wait::Wait;
 
-// Constants used for waiting in tests.
+// Constants used for waiting in tests.rs.
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
 pub const LONG_WAIT: Duration = Duration::from_secs(10);
 pub const CHECK_WAIT: Duration = Duration::from_millis(5);

@@ -487,7 +487,7 @@ fn competing_multiple_write_acquire_while_read_locked() {
     }
 }
 
-// TODO other tests, non-Transram, dumped here for convenience (move later)
+// TODO other tests.rs, non-Transram, dumped here for convenience (move later)
 
 #[test]
 fn micro_bench() {

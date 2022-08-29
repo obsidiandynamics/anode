@@ -1,3 +1,4 @@
+pub mod backoff;
 pub mod chalice;
 pub mod completable;
 pub mod deadline;
