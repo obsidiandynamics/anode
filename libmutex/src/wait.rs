@@ -144,6 +144,22 @@ pub trait RandomDuration {
     fn gen_range(&mut self, range: Range<Duration>) -> Duration;
 }
 
+pub struct NotRandom;
+
+impl Default for NotRandom {
+    #[inline(always)]
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl RandomDuration for NotRandom {
+    #[inline(always)]
+    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+        range.end
+    }
+}
+
 impl ExpBackoffAction {
     #[inline(always)]
     pub fn act<R, D>(&self, randomness: D) where R: RandomDuration, D: FnOnce() -> R {
