@@ -3,6 +3,7 @@ use std::cmp::{Ordering};
 use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
+use crate::inf_iter::{InfIterator, IntoInfIterator};
 
 pub type WaitResult = Result<(), ()>;
 
@@ -107,13 +108,13 @@ pub struct ExpBackoff {
     pub max_sleep: NonzeroDuration,
 }
 
-impl IntoIterator for &ExpBackoff {
+impl IntoInfIterator for &ExpBackoff {
     type Item = ExpBackoffAction;
-    type IntoIter = ExpBackoffIter;
+    type IntoInfIter = ExpBackoffIter;
 
     #[inline(always)]
-    fn into_iter(self) -> Self::IntoIter {
-        Self::IntoIter {
+    fn into_inf_iter(self) -> Self::IntoInfIter {
+        Self::IntoInfIter {
             spin_limit: self.spin_iters,
             yield_limit: self.spin_iters.saturating_add(self.yield_iters),
             max_sleep: self.max_sleep.into(),
@@ -161,24 +162,24 @@ impl ExpBackoffAction {
     }
 }
 
-impl Iterator for ExpBackoffIter {
+impl InfIterator for ExpBackoffIter {
     type Item = ExpBackoffAction;
 
     #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Self::Item {
         self.iterations += 1;
         if self.iterations <= self.spin_limit {
-            return Some(ExpBackoffAction::Nop);
+            return ExpBackoffAction::Nop;
         }
 
         if self.iterations <= self.yield_limit {
-            return Some(ExpBackoffAction::Yield)
+            return ExpBackoffAction::Yield;
         }
 
         let current_sleep = self.current_sleep;
         let new_sleep = self.current_sleep * 2;
         self.current_sleep = if new_sleep <= self.max_sleep { new_sleep } else { self.max_sleep };
-        Some(ExpBackoffAction::Sleep(NonzeroDuration(current_sleep)))
+        ExpBackoffAction::Sleep(NonzeroDuration(current_sleep))
     }
 }
 
