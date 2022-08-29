@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
 use std::time::Duration;
-use rand::{thread_rng};
+use rand::{Rng, thread_rng};
 use crate::deadline::Deadline;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
+use crate::rand::Rand64;
 use crate::wait::{ExpBackoff, ExpBackoffAction, MAX_WAITS_BEFORE_YIELDING, NonzeroDuration, Spin, Wait};
 
 #[test]
@@ -87,16 +88,16 @@ fn exp_backoff() {
     assert_eq!(ExpBackoffAction::Nop, it.next());
 }
 
-// impl<R: Rng> RandomDuration for R {
-//     fn gen_range(&mut self, range: Range<Duration>) -> Duration {
-//         self.gen_range(range)
-//     }
-// }
+impl<R: Rng> Rand64 for R {
+    fn next_u64(&mut self) -> u64 {
+        self.next_u64()
+    }
+}
 
 #[test]
 fn exp_backoff_act() {
-    let randomness = || thread_rng();
-    ExpBackoffAction::Nop.act(randomness);
-    ExpBackoffAction::Yield.act(randomness);
-    ExpBackoffAction::Sleep(Duration::from_micros(10).into()).act(randomness);
+    let mut thread_rng = thread_rng();
+    ExpBackoffAction::Nop.act(|| &mut thread_rng);
+    ExpBackoffAction::Yield.act(|| &mut thread_rng);
+    ExpBackoffAction::Sleep(Duration::from_micros(10).into()).act(|| &mut thread_rng);
 }

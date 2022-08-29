@@ -3,9 +3,8 @@ use std::cmp::{Ordering};
 use std::time::Duration;
 use std::{hint, thread};
 use std::ops::Range;
-use rand::Rng;
 use crate::inf_iter::{InfIterator, IntoInfIterator};
-use crate::rand::{Rand64, RandDuration};
+use crate::rand::{RandDuration};
 
 pub type WaitResult = Result<(), ()>;
 
@@ -172,7 +171,7 @@ pub enum ExpBackoffAction {
 
 impl ExpBackoffAction {
     #[inline(always)]
-    pub fn act<R, D>(&self, randomness: D) where R: RandDuration, D: FnOnce() -> R {
+    pub fn act<'a, R, D>(&self, randomness: D) where R: RandDuration + 'a, D: FnOnce() -> &'a mut R  {
         match self {
             ExpBackoffAction::Nop => (),
             ExpBackoffAction::Yield => thread::yield_now(),
@@ -181,7 +180,7 @@ impl ExpBackoffAction {
                     start: Duration::ZERO,
                     end: (*duration).into(),
                 };
-                let mut rng = randomness();
+                let rng = randomness();
                 thread::sleep(rng.gen_range(range));
             }
         }
@@ -221,11 +220,11 @@ impl InfIterator for ExpBackoffIter {
 //     }
 // }
 
-impl<R: Rng> Rand64 for R {
-    fn next_u64(&mut self) -> u64 {
-        self.next_u64()
-    }
-}
+// impl<R: Rng> Rand64 for R {
+//     fn next_u64(&mut self) -> u64 {
+//         self.next_u64()
+//     }
+// }
 
 #[cfg(test)]
 mod tests;
