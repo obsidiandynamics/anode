@@ -5,7 +5,7 @@ use crate::executor::{Executor, Queue, ThreadPool};
 
 #[test]
 fn unbounded_execute_tasks_via_submit() {
-    const THREADS: RangeInclusive<u16> = 1..=10;
+    const THREADS: RangeInclusive<usize> = 1..=10;
     const TASKS: u16 = 100;
 
     for threads in THREADS {
@@ -24,7 +24,7 @@ fn unbounded_execute_tasks_via_submit() {
 
 #[test]
 fn bounded_execute_tasks_via_submit() {
-    const THREADS: RangeInclusive<u16> = 1..=10;
+    const THREADS: RangeInclusive<usize> = 1..=10;
     const TASKS: u16 = 100;
 
     for threads in THREADS {
@@ -41,7 +41,7 @@ fn bounded_execute_tasks_via_submit() {
 
 #[test]
 fn unbounded_execute_tasks_via_try_submit() {
-    const THREADS: RangeInclusive<u16> = 1..=10;
+    const THREADS: RangeInclusive<usize> = 1..=10;
     const TASKS: u16 = 100;
 
     for threads in THREADS {
@@ -63,7 +63,7 @@ fn unbounded_execute_tasks_via_try_submit() {
 
 #[test]
 fn bounded_execute_tasks_via_try_submit() {
-    const THREADS: RangeInclusive<u16> = 1..=10;
+    const THREADS: RangeInclusive<usize> = 1..=10;
     const TASKS: u16 = 100;
 
     for threads in THREADS {

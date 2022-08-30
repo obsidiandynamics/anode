@@ -175,7 +175,7 @@ impl Seeded for Xorshift {
 
     #[inline]
     fn seed(seed: u64) -> Self::Rng {
-        // a zero seed disables Xorshift, rendering it a constant; we avoid it
+        // a zero seed disables Xorshift, rendering it (effectively) a constant; hence, we avoid it
         Self { seed: if seed == 0 { u64::MAX >> 1 } else { seed } }
     }
 }
@@ -184,6 +184,7 @@ impl Seeded for Xorshift {
 pub struct CyclicSeed(u64);
 
 impl CyclicSeed {
+    #[inline]
     pub fn new(seed: u64) -> Self {
         Self(seed)
     }
@@ -253,12 +254,15 @@ impl<S: Seeded, F: FnOnce() -> u64> Rand64 for LazyRand64<S, F> {
     }
 }
 
+/// Derives a seed from the system clock by XORing the upper 64 bits of the nanosecond timestamp
+/// with the lower 64 bits.
 pub fn clock_seed() -> u64 {
     let time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    time as u64
+    let folded = (time >> 64) ^ time;
+    folded as u64
 }
 
 #[cfg(test)]

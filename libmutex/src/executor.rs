@@ -60,6 +60,7 @@ pub struct ThreadPool {
     threads: Option<Vec<JoinHandle<()>>>,
 }
 
+#[derive(Debug, Clone)]
 pub enum Queue {
     Unbounded,
     Bounded(usize)
@@ -67,7 +68,7 @@ pub enum Queue {
 
 impl ThreadPool {
     #[inline]
-    pub fn new(threads: u16, queue: Queue) -> Self {
+    pub fn new(threads: usize, queue: Queue) -> Self {
         assert!(threads > 0);
         let running = Arc::new(AtomicBool::new(true));
         let (sender, receiver) = {

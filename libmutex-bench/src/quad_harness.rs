@@ -1,11 +1,11 @@
 use crate::lock_spec::{LockSpec, ReadGuardSpec, WriteGuardSpec};
 use libmutex::xlock::UpgradeOutcome;
-use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
-use std::thread;
+use std::{hint, thread};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
+use crate::rate::Rate;
 
 pub mod print;
 
@@ -125,46 +125,6 @@ impl BenchmarkResult {
 
     pub fn maybe_rate(&self, ops: Option<u64>) -> Option<Rate> {
         ops.map(|ops| self.rate(ops))
-    }
-}
-
-#[derive(Debug)]
-pub struct Rate(pub f64);
-
-impl Rate {
-    pub fn hz(&self) -> f64 {
-        self.0
-    }
-
-    pub fn khz(&self) -> f64 {
-        self.0 / 1_000.0
-    }
-
-    pub fn mhz(&self) -> f64 {
-        self.0 / 1_000_000.0
-    }
-}
-
-impl Display for Rate {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut unaligned = {
-            if f.alternate() {
-                format!("{:.3} kHz", self.khz())
-            } else {
-                match self.0 {
-                    val if val > 1_000_000.0 => format!("{:.3} MHz", self.mhz()),
-                    val if val > 1_000.0 => format!("{:.3} kHz", self.khz()),
-                    _ => format!("{:.3} Hz", self.hz()),
-                }
-            }
-        };
-
-        if let Some(width) = f.width() {
-            while unaligned.len() < width {
-                unaligned.insert(0, ' ');
-            }
-        }
-        f.write_str(&unaligned)
     }
 }
 
@@ -421,6 +381,7 @@ pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(
 fn spin_a_while(yields: u32) {
     let mut val = 1;
     for i in 0..yields {
+        hint::spin_loop();
         val += i
     }
     assert_ne!(val, 0);
@@ -429,6 +390,7 @@ fn spin_a_while(yields: u32) {
 #[inline]
 fn yield_a_while(yields: u32) {
     for _ in 0..yields {
+        hint::spin_loop();
         thread::yield_now();
     }
 }
