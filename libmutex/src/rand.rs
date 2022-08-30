@@ -31,6 +31,7 @@ pub trait Rand64 {
 }
 
 /// Represents a probability in the range \[0, 1\].
+#[derive(Clone, Copy)]
 pub struct Probability(f64);
 
 impl Probability {

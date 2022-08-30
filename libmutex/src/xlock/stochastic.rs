@@ -65,10 +65,13 @@ impl Moderator for Stochastic {
                     } else if !privilege_determined {
                         privilege_determined = true;
                         let position = position.unwrap();
-                        let p_privileged = 1.0 / (position as f64 + 1.0);
-                        let mut rng = Xorshift::seed(state.seed.next());
-                        if rng.gen_bool(p_privileged.into()) {
-                            saw_no_pending_writer = true
+                        if position < 4 {
+                            let divisor = position as f64 + 2.0;
+                            let p_privileged = 1.0 / divisor;
+                            let mut rng = Xorshift::seed(state.seed.next());
+                            if rng.gen_bool(p_privileged.into()) {
+                                saw_no_pending_writer = true
+                            }
                         }
                     }
                 }
