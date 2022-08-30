@@ -1,5 +1,6 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
+use crate::inf_iterator::{InfIterator, RangeCycle};
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
 use crate::rand::{Rand64, Seeded, Xorshift};
 use crate::xlock::{Moderator};
@@ -17,6 +18,7 @@ struct StochasticState {
     writer: bool,
     writer_pending: bool,
     queued: u32,
+    seed: RangeCycle<u64>,
 }
 
 impl StochasticState {
@@ -34,7 +36,13 @@ impl Moderator for Stochastic {
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            monitor: SpeculativeMonitor::new(StochasticState { readers: 0, writer: false, writer_pending: false, queued: 0 }),
+            monitor: SpeculativeMonitor::new(StochasticState {
+                readers: 0,
+                writer: false,
+                writer_pending: false,
+                queued: 0,
+                seed: RangeCycle::new(1..u64::MAX)
+            }),
         }
     }
 
@@ -58,7 +66,7 @@ impl Moderator for Stochastic {
                         privilege_determined = true;
                         let position = position.unwrap();
                         let p_privileged = 1.0 / (position as f64 + 1.0);
-                        let mut rng = Xorshift::seed((1 + state.readers + position) as u64);
+                        let mut rng = Xorshift::seed(state.seed.next());
                         if rng.gen_bool(p_privileged.into()) {
                             saw_no_pending_writer = true
                         }

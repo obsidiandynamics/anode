@@ -1,4 +1,5 @@
 use std::ops::Range;
+use crate::inf_iterator::RangeCycle;
 use super::{BoundedIterator, InfIterator, IntoInfIterator};
 
 pub struct RangeInfIterator {
@@ -23,17 +24,17 @@ impl InfIterator for RangeInfIterator {
     }
 }
 
-impl IntoInfIterator for Range<usize> {
-    type Item = usize;
-    type IntoInfIter = RangeInfIterator;
+impl IntoInfIterator for Range<u64> {
+    type Item = u64;
+    type IntoInfIter = RangeCycle<u64>;
 
     fn into_inf_iter(self) -> Self::IntoInfIter {
-        RangeInfIterator { range: self, pos: 0 }
+        RangeCycle::new(self)
     }
 }
 
 #[test]
-fn mod_counter_inf() {
+fn mod_cycle_inf() {
     let range = 5..6;
     let mut range_it = range.into_inf_iter();
     assert_eq!(5, range_it.next());
@@ -46,10 +47,17 @@ fn mod_counter_inf() {
     assert_eq!(6, range_it.next());
     assert_eq!(5, range_it.next());
     assert_eq!(6, range_it.next());
+
+    let range = u64::MAX-3..u64::MAX;
+    let mut range_it = range.into_inf_iter();
+    assert_eq!(u64::MAX - 3, range_it.next());
+    assert_eq!(u64::MAX - 2, range_it.next());
+    assert_eq!(u64::MAX - 1, range_it.next());
+    assert_eq!(u64::MAX - 3, range_it.next());
 }
 
 #[test]
-fn mod_counter_bounded() {
+fn mod_cycle_bounded() {
     let range = 5..6;
     let mut range_it: BoundedIterator<_> = range.into_inf_iter().into();
     assert_eq!(Some(5), range_it.next());
