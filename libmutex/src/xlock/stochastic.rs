@@ -1,7 +1,7 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::rand::{clock_seed, Rand64, Seeded, Xorshift};
+use crate::rand::{Rand64, Seeded, Xorshift};
 use crate::xlock::{Moderator};
 
 #[derive(Debug)]
@@ -56,8 +56,9 @@ impl Moderator for Stochastic {
                         saw_no_pending_writer = true;
                     } else if !privilege_determined {
                         privilege_determined = true;
-                        let p_privileged = 1.0 / (position.unwrap() as f64 + 1.0);
-                        let mut rng = Xorshift::seed(clock_seed());
+                        let position = position.unwrap();
+                        let p_privileged = 1.0 / (position as f64 + 1.0);
+                        let mut rng = Xorshift::seed((1 + state.readers + position) as u64);
                         if rng.gen_bool(p_privileged.into()) {
                             saw_no_pending_writer = true
                         }
