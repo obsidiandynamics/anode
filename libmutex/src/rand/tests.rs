@@ -114,8 +114,8 @@ fn random_duration() {
             exp_max: Duration::from_secs(100) - NANOSECOND
         },
         Case {
-            range: Duration::from_secs(u64::MAX >> 2)..Duration::MAX,
-            exp_min: Duration::from_secs(u64::MAX >> 2),
+            range: Duration::from_secs(u64::MAX >> 1)..Duration::MAX,
+            exp_min: Duration::from_secs(u64::MAX >> 1),
             exp_max: Duration::MAX - NANOSECOND
         }, 
         // from top
@@ -158,6 +158,45 @@ fn random_duration() {
     }
 }
 
+#[test]
+fn xorshift_constant_with_zero_seed() {
+    // initialise with 0 seed for testing only; the user cannot initialise Xorshift with 0
+    let mut rng = Xorshift { seed: 0 };
+    assert_eq!(0, rng.next_u64());
+    assert_eq!(0, rng.next_u64());
+}
+
+#[test]
+fn xorshift_seed() {
+    let mut rng = Xorshift::seed(0); // should not initialise from 0 seed under the hood
+    assert_eq!(u64::MAX >> 1, rng.seed);
+    assert_ne!(0, rng.next_u64());
+
+    let mut rng = Xorshift::seed(1); // every nonzero seed is okay
+    assert_eq!(1, rng.seed);
+    assert_ne!(0, rng.next_u64());
+
+    let mut rng = Xorshift::seed(u64::MAX); // every nonzero seed is okay
+    assert_eq!(u64::MAX, rng.seed);
+    assert_ne!(0, rng.next_u64());
+}
+
+#[test]
+fn cyclic_seed() {
+    let mut seed = CyclicSeed::default();
+    assert_eq!(0, seed.next());
+    assert_eq!(1, seed.next());
+    assert_eq!(2, seed.next());
+    assert_eq!(3, seed.next());
+
+    let mut seed = CyclicSeed::new(u64::MAX - 3);
+    assert_eq!(u64::MAX - 3, seed.next());
+    assert_eq!(u64::MAX - 2, seed.next());
+    assert_eq!(u64::MAX - 1, seed.next());
+    assert_eq!(u64::MAX, seed.next());
+    assert_eq!(0, seed.next());
+    assert_eq!(1, seed.next());
+}
 
 #[derive(Default, Debug)]
 struct MockRng {

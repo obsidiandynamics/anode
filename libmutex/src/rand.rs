@@ -1,3 +1,4 @@
+use crate::inf_iterator::InfIterator;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::time::{Duration, SystemTime};
@@ -23,7 +24,8 @@ pub trait Rand64 {
             // guarantees that gen_bool(p=1.0) is never true
             next = u64::MAX - 1;
         }
-        #[cfg(test)] dbg!((cutoff, next));
+        #[cfg(test)]
+        dbg!((cutoff, next));
         next < cutoff
     }
 }
@@ -171,8 +173,37 @@ impl Rand64 for Xorshift {
 impl Seeded for Xorshift {
     type Rng = Xorshift;
 
+    #[inline]
     fn seed(seed: u64) -> Self::Rng {
-        Self { seed }
+        // a zero seed disables Xorshift, rendering it a constant; we avoid it
+        Self { seed: if seed == 0 { u64::MAX >> 1 } else { seed } }
+    }
+}
+
+#[derive(Debug)]
+pub struct CyclicSeed(u64);
+
+impl CyclicSeed {
+    pub fn new(seed: u64) -> Self {
+        Self(seed)
+    }
+}
+
+impl Default for CyclicSeed {
+    #[inline]
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl InfIterator for CyclicSeed {
+    type Item = u64;
+
+    #[inline]
+    fn next(&mut self) -> Self::Item {
+        let current = self.0;
+        self.0 = if current == u64::MAX { 0 } else { current + 1 };
+        current
     }
 }
 
@@ -223,7 +254,10 @@ impl<S: Seeded, F: FnOnce() -> u64> Rand64 for LazyRand64<S, F> {
 }
 
 pub fn clock_seed() -> u64 {
-    let time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+    let time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     time as u64
 }
 

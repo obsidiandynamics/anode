@@ -1,8 +1,8 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
-use crate::inf_iterator::{InfIterator, RangeCycle};
+use crate::inf_iterator::{InfIterator};
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::rand::{Rand64, Seeded, Xorshift};
+use crate::rand::{Rand64, Seeded, Xorshift, CyclicSeed};
 use crate::xlock::{Moderator};
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ struct StochasticState {
     writer: bool,
     writer_pending: bool,
     queued: u32,
-    seed: RangeCycle<u64>,
+    seed: CyclicSeed,
 }
 
 impl StochasticState {
@@ -41,7 +41,7 @@ impl Moderator for Stochastic {
                 writer: false,
                 writer_pending: false,
                 queued: 0,
-                seed: RangeCycle::new(1..u64::MAX)
+                seed: CyclicSeed::default()
             }),
         }
     }
