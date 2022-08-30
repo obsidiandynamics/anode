@@ -5,12 +5,13 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use libmutex::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
+use libmutex::xlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, XLock};
 use crate::pl_harness::RwLock;
 
 pub struct ReadBiasedLock<T>(XLock<T, ReadBiased>);
 pub struct WriteBiasedLock<T>(XLock<T, WriteBiased>);
 pub struct ArrivalOrderedLock<T>(XLock<T, ArrivalOrdered>);
+pub struct StochasticLock<T>(XLock<T, Stochastic>);
 pub struct ParkingLotLock<T>(parking_lot::RwLock<T>);
 pub struct StdLock<T>(std::sync::RwLock<T>);
 
@@ -107,6 +108,30 @@ impl<T> RwLock<T> for ArrivalOrderedLock<T> {
 
     fn name() -> &'static str {
         "synchrony::rwlock::RwLock<ArrivalOrdered>"
+    }
+}
+
+impl<T> RwLock<T> for StochasticLock<T> {
+    fn new(v: T) -> Self {
+        Self(XLock::new(v))
+    }
+
+    fn read<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce(&T) -> R,
+    {
+        f(&*self.0.read())
+    }
+
+    fn write<F, R>(&self, f: F) -> R
+        where
+            F: FnOnce(&mut T) -> R,
+    {
+        f(&mut *self.0.write())
+    }
+
+    fn name() -> &'static str {
+        "synchrony::rwlock::RwLock<Stochastic>"
     }
 }
 

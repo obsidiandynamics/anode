@@ -157,3 +157,58 @@ fn random_duration() {
         );
     }
 }
+
+
+#[derive(Default, Debug)]
+struct MockRng {
+    next: u64,
+}
+
+impl Rand64 for MockRng {
+    fn next_u64(&mut self) -> u64 {
+        self.next
+    }
+}
+
+#[test]
+fn gen_bool() {
+    // NB: no matter what the random number, p(0.0) should always evaluate to false,
+    // while p(1.0) should always evaluate to true
+
+    let mut rng = MockRng::default();
+    rng.next = 0;
+    assert!(!rng.gen_bool(0.0.into()));
+    assert!(rng.gen_bool(f64::EPSILON.into()));
+    assert!(rng.gen_bool(0.5.into()));
+    assert!(rng.gen_bool(1.0.into()));
+
+    rng.next = u64::MAX / 4;
+    assert!(!rng.gen_bool(0.0.into()));
+    assert!(!rng.gen_bool((0.25 - f64::EPSILON).into()));
+    assert!(rng.gen_bool((0.25 + f64::EPSILON).into()));
+    assert!(rng.gen_bool(1.0.into()));
+
+    rng.next = u64::MAX / 2;
+    assert!(!rng.gen_bool(0.0.into()));
+    assert!(!rng.gen_bool((0.5 - f64::EPSILON).into()));
+    assert!(rng.gen_bool((0.5 + f64::EPSILON).into()));
+    assert!(rng.gen_bool(1.0.into()));
+
+    rng.next = u64::MAX;
+    assert!(!rng.gen_bool(0.0.into()));
+    assert!(!rng.gen_bool(0.5.into()));
+    assert!(!rng.gen_bool((1.0 - f64::EPSILON).into()));
+    assert!(rng.gen_bool(1.0.into()));
+}
+
+#[test]
+#[should_panic(expected="cannot be less than 0")]
+fn probability_panics_lt_0() {
+    Probability::new(0f64 - f64::EPSILON);
+}
+
+#[test]
+#[should_panic(expected="cannot be greater than 1")]
+fn probability_panics_gt_1() {
+    Probability::new(1f64 + f64::EPSILON);
+}

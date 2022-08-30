@@ -60,10 +60,10 @@ impl Moderator for ArrivalOrdered {
         });
 
         if !acquired {
-            let mut incremented_serviced = false;
+            let mut inc_serviced = false;
             sync.monitor.enter(|state| {
-                if !incremented_serviced {
-                    incremented_serviced = true;
+                if !inc_serviced {
+                    inc_serviced = true;
                     state.serviced_tickets += 1;
                 }
                 Directive::NotifyAll
@@ -71,27 +71,6 @@ impl Moderator for ArrivalOrdered {
         }
 
         acquired
-
-        // let mut deadline = Deadline::lazy_after(duration);
-        // let mut state = sync.monitor.lock().remedy();
-        // let ticket = state.take_ticket();
-        // while state.writer || state.serviced_tickets < ticket - 1 {
-        //     let (mut guard, timed_out) =
-        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-        //
-        //     if timed_out {
-        //         guard.serviced_tickets += 1;
-        //         drop(guard);
-        //         sync.cond.notify_all();
-        //         return false
-        //     }
-        //     state = guard;
-        // }
-        // state.serviced_tickets += 1;
-        // state.readers += 1;
-        // drop(state);
-        // sync.cond.notify_all();
-        // true
     }
 
     #[inline]
@@ -111,16 +90,6 @@ impl Moderator for ArrivalOrdered {
                 _ => Directive::Return
             }
         });
-
-        // let mut state = sync.monitor.lock().remedy();
-        // debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        // debug_assert!(!state.writer);
-        // state.readers -= 1;
-        // let readers = state.readers;
-        // drop(state);
-        // if readers <= 1 {
-        //     sync.cond.notify_all();
-        // }
     }
 
     #[inline]
@@ -146,10 +115,10 @@ impl Moderator for ArrivalOrdered {
         });
 
         if !acquired {
-            let mut incremented_serviced = false;
+            let mut inc_serviced = false;
             sync.monitor.enter(|state| {
-                if !incremented_serviced {
-                    incremented_serviced = true;
+                if !inc_serviced {
+                    inc_serviced = true;
                     state.serviced_tickets += 1;
                 }
                 Directive::NotifyAll
@@ -157,26 +126,6 @@ impl Moderator for ArrivalOrdered {
         }
 
         acquired
-        // let mut deadline = Deadline::lazy_after(duration);
-        // let mut state = sync.monitor.lock().remedy();
-        // let ticket = state.take_ticket();
-        // while state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1 {
-        //     let (mut guard, timed_out) =
-        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-        //
-        //     if timed_out {
-        //         guard.serviced_tickets += 1;
-        //         drop(guard);
-        //         sync.cond.notify_all();
-        //         return false;
-        //     }
-        //     state = guard;
-        // }
-        // state.serviced_tickets += 1;
-        // state.writer = true;
-        // drop(state);
-        // sync.cond.notify_all();
-        // true
     }
 
     #[inline]
@@ -193,13 +142,6 @@ impl Moderator for ArrivalOrdered {
 
             Directive::NotifyAll
         });
-
-        // let mut state = sync.monitor.lock().remedy();
-        // debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        // debug_assert!(state.writer);
-        // state.writer = false;
-        // drop(state);
-        // sync.cond.notify_all();
     }
 
     fn downgrade(sync: &Self::Sync) {
@@ -216,14 +158,6 @@ impl Moderator for ArrivalOrdered {
 
             Directive::NotifyAll
         });
-
-        // let mut state = sync.monitor.lock().remedy();
-        // debug_assert!(state.readers == 0, "readers: {}", state.readers);
-        // debug_assert!(state.writer);
-        // state.readers = 1;
-        // state.writer = false;
-        // drop(state);
-        // sync.cond.notify_all();
     }
 
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool {
@@ -245,25 +179,6 @@ impl Moderator for ArrivalOrdered {
             }
         });
         acquired
-
-        // let mut deadline = Deadline::lazy_after(duration);
-        // let mut state = sync.monitor.lock().remedy();
-        // debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        // debug_assert!(!state.writer);
-        // while state.readers != 1 {
-        //     let (guard, timed_out) =
-        //         remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
-        //
-        //     if timed_out {
-        //         return false
-        //     }
-        //     state = guard;
-        //     debug_assert!(state.readers > 0, "readers: {}", state.readers);
-        //     debug_assert!(!state.writer);
-        // }
-        // state.readers = 0;
-        // state.writer = true;
-        // true
     }
 }
 

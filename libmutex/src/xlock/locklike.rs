@@ -1,7 +1,4 @@
-use crate::xlock::{
-    ArrivalOrdered, LockReadGuard, LockWriteGuard, Moderator, ReadBiased, UpgradeOutcome,
-    WriteBiased, XLock,
-};
+use crate::xlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, Moderator, ReadBiased, Stochastic, UpgradeOutcome, WriteBiased, XLock};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
@@ -267,12 +264,14 @@ pub enum ModeratorKind {
     ReadBiased,
     WriteBiased,
     ArrivalOrdered,
+    Stochastic,
 }
 
-pub const MODERATOR_KINDS: [ModeratorKind; 3] = [
+pub const MODERATOR_KINDS: [ModeratorKind; 4] = [
     ModeratorKind::ReadBiased,
     ModeratorKind::WriteBiased,
     ModeratorKind::ArrivalOrdered,
+    ModeratorKind::Stochastic,
 ];
 
 impl ModeratorKind {
@@ -282,6 +281,7 @@ impl ModeratorKind {
             ModeratorKind::ReadBiased => Box::new(PolyLock(XLock::<_, ReadBiased>::new(t))),
             ModeratorKind::WriteBiased => Box::new(PolyLock(XLock::<_, WriteBiased>::new(t))),
             ModeratorKind::ArrivalOrdered => Box::new(PolyLock(XLock::<_, ArrivalOrdered>::new(t))),
+            ModeratorKind::Stochastic => Box::new(PolyLock(XLock::<_, Stochastic>::new(t))),
         }
     }
 }

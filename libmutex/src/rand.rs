@@ -6,6 +6,59 @@ use std::time::{Duration, SystemTime};
 pub trait Rand64 {
     /// Return the next random `u64`.
     fn next_u64(&mut self) -> u64;
+
+    /// Returns a `bool` with a probability `p` of being true.
+    ///
+    /// # Example
+    /// ```
+    /// use libmutex::rand::{Probability, Rand64, Xorshift};
+    /// let mut rng = Xorshift::default();
+    /// println!("{}", rng.gen_bool(Probability::new(1.0 / 3.0)));
+    /// ```
+    #[inline]
+    fn gen_bool(&mut self, p: Probability) -> bool {
+        let cutoff = (p.0 * u64::MAX as f64) as u64;
+        let mut next = self.next_u64();
+        if next == u64::MAX {
+            // guarantees that gen_bool(p=1.0) is never true
+            next = u64::MAX - 1;
+        }
+        #[cfg(test)] dbg!((cutoff, next));
+        next < cutoff
+    }
+}
+
+pub struct Probability(f64);
+
+impl Probability {
+    /// Creates a new [`Probability`] value, bounded in the range \[0, 1\].
+    ///
+    /// # Example
+    /// ```
+    /// use libmutex::rand::Probability;
+    /// let p = Probability::new(0.25);
+    /// assert_eq!(0.25, p.into());
+    /// ```
+    ///
+    /// # Panics
+    /// If `p < 0` or `p > 1`.
+    pub fn new(p: f64) -> Self {
+        assert!(p >= 0f64, "p ({p}) cannot be less than 0");
+        assert!(p <= 1f64, "p ({p}) cannot be greater than 1");
+        Self(p)
+    }
+}
+
+impl From<Probability> for f64 {
+    fn from(p: Probability) -> Self {
+        p.0
+    }
+}
+
+impl From<f64> for Probability {
+    fn from(p: f64) -> Self {
+        Probability::new(p)
+    }
 }
 
 /// The means for seeding an RNG.

@@ -7,7 +7,11 @@ use std::time::Duration;
 pub trait Monitor<S: ?Sized> {
     fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F);
 
-    /// Invokes the given closure exactly once, supplying the encapsulated state for observation.
+    /// Invokes the given closure exactly once, supplying the encapsulated state for alteration
+    /// or observation.
+    ///
+    /// When there is no need to wait for or notify other threads, this method is preferred
+    /// over [`enter`](Self::enter), as it takes a stronger form of closure that is evaluated once.
     ///
     /// # Examples
     /// ```
@@ -17,12 +21,13 @@ pub trait Monitor<S: ?Sized> {
     /// }
     /// let monitor = SpeculativeMonitor::new(State { foo: 42 });
     /// let mut foo = None;
-    /// monitor.observe(|state| {
+    /// monitor.alter(|state| {
     ///     foo = Some(state.foo);
+    ///     state.foo *= 1;
     /// });
     /// assert_eq!(Some(42), foo);
     /// ```
-    fn observe<F: FnOnce(&S)>(&self, f: F);
+    fn alter<F: FnOnce(&mut S)>(&self, f: F);
 
     /// Performs some computation over the encapsulated state. It may be as simple as
     /// extracting a value.
@@ -40,7 +45,7 @@ pub trait Monitor<S: ?Sized> {
     /// ```
     fn compute<T, F: FnOnce(&S) -> T>(&self, f: F) -> T {
         let mut val = None;
-        self.observe(|state| {
+        self.alter(|state| {
             val = Some(f(state));
         });
         val.unwrap() // guaranteed to be initialised
@@ -160,9 +165,9 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
     }
 
     #[inline(always)]
-    fn observe<F: FnOnce(&S)>(&self, f: F) {
-        let spin_guard = self.tracker.lock();
-        f(&spin_guard.data);
+    fn alter<F: FnOnce(&mut S)>(&self, f: F) {
+        let mut spin_guard = self.tracker.lock();
+        f(&mut spin_guard.data);
     }
 }
 

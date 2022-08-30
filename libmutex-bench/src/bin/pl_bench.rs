@@ -7,7 +7,7 @@
 
 use libmutex_bench::args::ArgRange;
 use libmutex_bench::{args, pl_harness};
-use libmutex_bench::pl_shims::{ArrivalOrderedLock, ParkingLotLock, ReadBiasedLock, StdLock, WriteBiasedLock};
+use libmutex_bench::pl_shims::{ArrivalOrderedLock, ParkingLotLock, ReadBiasedLock, StdLock, StochasticLock, WriteBiasedLock};
 
 fn run_all(
     args: &[ArgRange],
@@ -58,6 +58,15 @@ fn run_all(
     );
 
     pl_harness::run_benchmark_iterations::<ArrivalOrderedLock<f64>>(
+        num_writer_threads,
+        num_reader_threads,
+        work_per_critical_section,
+        work_between_critical_sections,
+        seconds_per_test,
+        test_iterations,
+    );
+
+    pl_harness::run_benchmark_iterations::<StochasticLock<f64>>(
         num_writer_threads,
         num_reader_threads,
         work_per_critical_section,

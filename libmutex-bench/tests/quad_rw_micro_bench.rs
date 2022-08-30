@@ -1,6 +1,6 @@
 use std::any;
 use std::time::Duration;
-use libmutex::xlock::{ArrivalOrdered, ReadBiased, WriteBiased, XLock};
+use libmutex::xlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, XLock};
 use libmutex_bench::lock_spec::LockSpec;
 use libmutex_bench::quad_harness;
 use libmutex_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
@@ -48,6 +48,21 @@ fn quake_micro_bench_arrival_ordered_boxed_int() {
 #[test]
 fn quake_micro_bench_arrival_ordered_string() {
     __quake_micro_bench::<String, XLock<_, ArrivalOrdered>>();
+}
+
+#[test]
+fn quake_micro_bench_stochastic_int() {
+    __quake_micro_bench::<i64, XLock<_, Stochastic>>();
+}
+
+#[test]
+fn quake_micro_bench_stochastic_boxed_int() {
+    __quake_micro_bench::<BoxedInt, XLock<_, Stochastic>>();
+}
+
+#[test]
+fn quake_micro_bench_stochastic_string() {
+    __quake_micro_bench::<String, XLock<_, Stochastic>>();
 }
 
 fn __quake_micro_bench<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>() {
