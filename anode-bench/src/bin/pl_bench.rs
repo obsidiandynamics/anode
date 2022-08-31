@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use libmutex_bench::args::ArgRange;
-use libmutex_bench::{args, pl_harness};
-use libmutex_bench::pl_shims::{ArrivalOrderedLock, ParkingLotLock, ReadBiasedLock, StdLock, StochasticLock, WriteBiasedLock};
+use anode_bench::args::ArgRange;
+use anode_bench::{args, pl_harness};
+use anode_bench::pl_shims::{ArrivalOrderedLock, ParkingLotLock, ReadBiasedLock, StdLock, StochasticLock, WriteBiasedLock};
 
 fn run_all(
     args: &[ArgRange],

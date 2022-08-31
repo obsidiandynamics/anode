@@ -1,4 +1,4 @@
-use libmutex::rand::{clock_seed, Probability, Rand64, Seeded, Xorshift};
+use anode::rand::{clock_seed, Probability, Rand64, Seeded, Xorshift};
 
 fn main() {
     //TODO

@@ -70,7 +70,7 @@ impl<T> RefUnwindSafe for UnwindableRefCell<T> {}
 ///
 /// # Examples (not compiled)
 /// ```
-/// use libmutex::test_utils::spawn_blocked;
+/// use anode::test_utils::spawn_blocked;
 /// let thread = spawn_blocked(|| {
 ///     // wait_for_something_important
 /// });

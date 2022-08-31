@@ -1,9 +1,9 @@
 use std::any;
 use std::time::Duration;
-use libmutex::xlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, XLock};
-use libmutex_bench::lock_spec::LockSpec;
-use libmutex_bench::quad_harness;
-use libmutex_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
+use anode::xlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, XLock};
+use anode_bench::lock_spec::LockSpec;
+use anode_bench::quad_harness;
+use anode_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
 
 #[test]
 fn quad_micro_bench_read_biased_int() {

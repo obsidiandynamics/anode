@@ -1,6 +1,6 @@
-use libmutex::spinlock::{SpinGuard, SpinLock};
-use libmutex::remedy::Remedy;
-use libmutex::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
+use anode::spinlock::{SpinGuard, SpinLock};
+use anode::remedy::Remedy;
+use anode::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::{MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};

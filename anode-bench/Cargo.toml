@@ -1,8 +1,8 @@
 [package]
-name = "libmutex-bench"
+name = "anode-bench"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-libmutex = { version = "0.1.0", path = "../libmutex" }
+anode = { version = "0.1.0", path = "../anode" }
 parking_lot = { version = "0.12.1" }

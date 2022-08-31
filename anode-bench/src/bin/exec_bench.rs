@@ -1,8 +1,8 @@
 use std::time::Duration;
-use libmutex::executor::{Executor, Queue, ThreadPool};
-use libmutex_bench::{args, exec_harness};
-use libmutex_bench::exec_harness::{ExtendedOptions, Options};
-use libmutex_bench::exec_harness::print::{Header, Separator};
+use anode::executor::{Executor, Queue, ThreadPool};
+use anode_bench::{args, exec_harness};
+use anode_bench::exec_harness::{ExtendedOptions, Options};
+use anode_bench::exec_harness::print::{Header, Separator};
 
 fn main() {
     const QUEUE: Queue = Queue::Bounded(10000);

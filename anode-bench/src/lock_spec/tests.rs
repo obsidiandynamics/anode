@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use libmutex::xlock::{ReadBiased, XLock};
+use anode::xlock::{ReadBiased, XLock};
 use crate::lock_spec::LockSpec;
 
 #[test]

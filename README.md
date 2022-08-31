@@ -1,2 +1,4 @@
-# libmutex
-Upgradeable read-write locks for Rust.
+# Anode
+
+---
+Concurrency library for Rust.

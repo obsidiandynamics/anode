@@ -1,9 +1,9 @@
 use std::any;
 use std::time::Duration;
-use libmutex::spinlock::SpinLock;
-use libmutex_bench::lock_spec::LockSpec;
-use libmutex_bench::quad_harness;
-use libmutex_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
+use anode::spinlock::SpinLock;
+use anode_bench::lock_spec::LockSpec;
+use anode_bench::quad_harness;
+use anode_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
 
 #[test]
 fn quad_micro_bench_int() {

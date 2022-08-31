@@ -1,5 +1,5 @@
-use libmutex_bench::{pl_harness, pl_shims};
-use libmutex_bench::pl_harness::RwLock;
+use anode_bench::{pl_harness, pl_shims};
+use anode_bench::pl_harness::RwLock;
 
 #[test]
 fn pl_micro_bench_read_biased() {

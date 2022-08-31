@@ -1,11 +1,11 @@
-use libmutex::executor::{Executor};
+use anode::executor::{Executor};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc};
 use std::thread;
 use std::time::{Duration, Instant};
-use libmutex::spinlock::SpinLock;
-use libmutex::wait;
-use libmutex::wait::Wait;
+use anode::spinlock::SpinLock;
+use anode::wait;
+use anode::wait::Wait;
 use crate::rate::Elapsed;
 
 pub mod print;

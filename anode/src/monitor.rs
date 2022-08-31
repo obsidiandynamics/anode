@@ -15,7 +15,7 @@ pub trait Monitor<S: ?Sized> {
     ///
     /// # Examples
     /// ```
-    /// use libmutex::monitor::{Monitor, SpeculativeMonitor};
+    /// use anode::monitor::{Monitor, SpeculativeMonitor};
     /// struct State {
     ///     foo: u64
     /// }
@@ -34,7 +34,7 @@ pub trait Monitor<S: ?Sized> {
     ///
     /// # Examples
     /// ```
-    /// use libmutex::monitor::{Monitor, SpeculativeMonitor};
+    /// use anode::monitor::{Monitor, SpeculativeMonitor};
     /// struct State {
     ///     foo: u64,
     ///     bar: u64,

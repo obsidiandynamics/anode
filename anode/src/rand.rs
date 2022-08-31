@@ -12,7 +12,7 @@ pub trait Rand64 {
     ///
     /// # Example
     /// ```
-    /// use libmutex::rand::{Probability, Rand64, Xorshift};
+    /// use anode::rand::{Probability, Rand64, Xorshift};
     /// let mut rng = Xorshift::default();
     /// println!("{}", rng.gen_bool(Probability::new(1.0 / 3.0)));
     /// ```
@@ -39,7 +39,7 @@ impl Probability {
     ///
     /// # Example
     /// ```
-    /// use libmutex::rand::Probability;
+    /// use anode::rand::Probability;
     /// let p = Probability::new(0.25);
     /// assert_eq!(0.25, p.into());
     /// ```

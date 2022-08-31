@@ -1,14 +1,14 @@
 use std::sync::{Mutex, RwLock};
-use libmutex::xlock::{ArrivalOrdered, LegacyReadBiased, LegacyWriteBiased, Stochastic};
-use libmutex::xlock::ReadBiased;
-use libmutex::xlock::WriteBiased;
-use libmutex::xlock::XLock;
-use libmutex_bench::quad_harness::{ExtendedOptions, Options};
-use libmutex_bench::{args, quad_harness};
+use anode::xlock::{ArrivalOrdered, LegacyReadBiased, LegacyWriteBiased, Stochastic};
+use anode::xlock::ReadBiased;
+use anode::xlock::WriteBiased;
+use anode::xlock::XLock;
+use anode_bench::quad_harness::{ExtendedOptions, Options};
+use anode_bench::{args, quad_harness};
 use std::time::Duration;
-use libmutex::spinlock::SpinLock;
-use libmutex_bench::lock_spec::LockSpec;
-use libmutex_bench::quad_harness::print::{Header, Separator};
+use anode::spinlock::SpinLock;
+use anode_bench::lock_spec::LockSpec;
+use anode_bench::quad_harness::print::{Header, Separator};
 
 fn main() {
     let args = args::parse(&["readers", "writers", "downgraders", "upgraders", "duration"]);

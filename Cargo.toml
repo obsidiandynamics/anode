@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "libmutex",
-    "libmutex-bench",
+    "anode",
+    "anode-bench",
 ]
