@@ -8,7 +8,7 @@ use crate::inf_iterator::{InfIterator, IntoInfIterator};
 use crate::rand::{*, LazyRand64, Xorshift};
 
 unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
-unsafe impl<T: ?Sized + Send + Sync> Sync for SpinLock<T> {}
+unsafe impl<T: ?Sized + Send> Sync for SpinLock<T> {}
 unsafe impl<T: ?Sized + Sync> Sync for SpinGuard<'_, T> {}
 
 pub struct SpinLock<T: ?Sized> {
