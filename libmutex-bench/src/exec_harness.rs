@@ -2,9 +2,12 @@ use libmutex::executor::{Executor};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use libmutex::wait;
 use libmutex::wait::Wait;
+use crate::rate::Elapsed;
+
+pub mod print;
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -26,13 +29,27 @@ impl Default for ExtendedOptions {
     }
 }
 
-pub fn run<E: Executor + Send + 'static>(executor: E, opts: &Options, ext_opts: &ExtendedOptions) {
+#[derive(Debug)]
+pub struct BenchmarkResult {
+    pub iterations: Option<u64>,
+    pub elapsed: Duration,
+}
+
+impl Elapsed for BenchmarkResult {
+    fn elapsed(&self) -> Duration {
+        self.elapsed
+    }
+}
+
+pub fn run<E: Executor + Send + 'static>(executor: E, opts: &Options, ext_opts: &ExtendedOptions) -> BenchmarkResult {
     let time_check_interval = ext_opts.time_check_interval as u64;
     let debug_exits = ext_opts.debug_exits;
     let duration = opts.duration;
 
     let running = Arc::new(AtomicBool::new(true));
     let completed_tasks = Arc::new(AtomicU64::default());
+
+    let start_time = Instant::now();
     let load_thread = {
         let running = running.clone();
         let completed_tasks = completed_tasks.clone();
@@ -68,4 +85,8 @@ pub fn run<E: Executor + Send + 'static>(executor: E, opts: &Options, ext_opts: 
     let iterations = load_thread.join().unwrap();
 
     wait::Spin::wait_for(move || completed_tasks.load(Ordering::Relaxed) == iterations, Duration::MAX).unwrap();
+
+    BenchmarkResult {
+        iterations,
+    }
 }

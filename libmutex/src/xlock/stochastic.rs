@@ -65,7 +65,7 @@ impl Moderator for Stochastic {
                     } else if !privilege_determined {
                         privilege_determined = true;
                         let position = position.unwrap();
-                        if position < 4 {
+                        if position < 64 {
                             let divisor = position as f64 + 2.0;
                             let p_privileged = 1.0 / divisor;
                             let mut rng = Xorshift::seed(state.seed.next());

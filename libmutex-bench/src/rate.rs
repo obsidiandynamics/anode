@@ -1,5 +1,6 @@
 use std::fmt::Formatter;
 use std::fmt::Display;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Rate(pub f64);
@@ -38,5 +39,17 @@ impl Display for Rate {
             }
         }
         f.write_str(&unaligned)
+    }
+}
+
+pub trait Elapsed {
+    fn elapsed(&self) -> Duration;
+
+    fn rate(&self, ops: u64) -> Rate {
+        Rate(ops as f64 / self.elapsed().as_secs_f64())
+    }
+
+    fn maybe_rate(&self, ops: Option<u64>) -> Option<Rate> {
+        ops.map(|ops| self.rate(ops))
     }
 }
