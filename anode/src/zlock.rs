@@ -282,13 +282,13 @@ impl<W, R> UpgradeOutcome<W, R> {
     }
 }
 
-impl<T: ?Sized + fmt::Debug, M: Moderator> fmt::Debug for ZLock<T, M> {
+impl<T: ?Sized + Debug, M: Moderator> Debug for ZLock<T, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("ZLock");
         match self.try_read(Duration::ZERO) {
             None => {
                 struct LockedPlaceholder;
-                impl fmt::Debug for LockedPlaceholder {
+                impl Debug for LockedPlaceholder {
                     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                         f.write_str("<locked>")
                     }
@@ -302,12 +302,6 @@ impl<T: ?Sized + fmt::Debug, M: Moderator> fmt::Debug for ZLock<T, M> {
         d.finish_non_exhaustive()
     }
 }
-
-#[cfg(test)]
-mod faulty;
-
-#[cfg(test)]
-pub use faulty::Faulty;
 
 #[cfg(test)]
 pub mod locklike;
