@@ -3,6 +3,16 @@ name = "anode-bench"
 version = "0.0.0"
 edition = "2021"
 
+[lib]
+bench = false
+
 [dependencies]
 anode = { version = "0.1.0", path = "../anode" }
 parking_lot = { version = "0.12.1" }
+
+[dev-dependencies]
+criterion = "0.3.6"
+
+[[bench]]
+name = "completable"
+harness = false
