@@ -17,6 +17,14 @@ impl Rate {
     pub fn mhz(&self) -> f64 {
         self.0 / 1_000_000.0
     }
+
+    pub fn rate(duration: Duration, ops: u64) -> Rate {
+        Rate(ops as f64 / duration.as_secs_f64())
+    }
+
+    pub fn maybe_rate(duration: Duration, ops: Option<u64>) -> Option<Rate> {
+        ops.map(|ops| Self::rate(duration, ops))
+    }
 }
 
 impl Display for Rate {
@@ -39,17 +47,5 @@ impl Display for Rate {
             }
         }
         f.write_str(&unaligned)
-    }
-}
-
-pub trait Elapsed {
-    fn elapsed(&self) -> Duration;
-
-    fn rate(&self, ops: u64) -> Rate {
-        Rate(ops as f64 / self.elapsed().as_secs_f64())
-    }
-
-    fn maybe_rate(&self, ops: Option<u64>) -> Option<Rate> {
-        ops.map(|ops| self.rate(ops))
     }
 }

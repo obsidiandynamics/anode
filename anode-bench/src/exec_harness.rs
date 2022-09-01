@@ -5,7 +5,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 use anode::wait;
 use anode::wait::Wait;
-use crate::rate::Elapsed;
 
 pub mod print;
 
@@ -35,13 +34,7 @@ pub struct BenchmarkResult {
     pub elapsed: Duration,
 }
 
-impl Elapsed for BenchmarkResult {
-    fn elapsed(&self) -> Duration {
-        self.elapsed
-    }
-}
-
-pub fn run<E: Executor + Send + 'static>(executor: E, opts: &Options, ext_opts: &ExtendedOptions) -> BenchmarkResult {
+pub fn run<E: Executor + 'static>(executor: E, opts: &Options, ext_opts: &ExtendedOptions) -> BenchmarkResult {
     let time_check_interval = ext_opts.time_check_interval as u64;
     let debug_exits = ext_opts.debug_exits;
     let duration = opts.duration;

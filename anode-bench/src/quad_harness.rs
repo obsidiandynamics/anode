@@ -5,7 +5,6 @@ use std::sync::{Arc, Barrier};
 use std::{hint, thread};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use crate::rate::Rate;
 
 pub mod print;
 
@@ -116,16 +115,6 @@ pub struct BenchmarkResult {
     pub downgrades: Option<u64>,
     pub upgrades: Option<u64>,
     pub elapsed: Duration,
-}
-
-impl BenchmarkResult {
-    pub fn rate(&self, ops: u64) -> Rate {
-        Rate(ops as f64 / self.elapsed.as_secs_f64())
-    }
-
-    pub fn maybe_rate(&self, ops: Option<u64>) -> Option<Rate> {
-        ops.map(|ops| self.rate(ops))
-    }
 }
 
 pub fn run<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>(

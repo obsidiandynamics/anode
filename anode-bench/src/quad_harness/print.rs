@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 use crate::quad_harness::{BenchmarkResult, Options};
+use crate::rate::Rate;
 
 impl Display for Options {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -29,10 +30,10 @@ impl Display for Options {
 
 impl Display for BenchmarkResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let read_rate = self.maybe_rate(self.reads);
-        let write_rate = self.maybe_rate(self.writes);
-        let downgrade_rate = self.maybe_rate(self.downgrades);
-        let upgrade_rate = self.maybe_rate(self.upgrades);
+        let read_rate = Rate::maybe_rate(self.elapsed, self.reads);
+        let write_rate = Rate::maybe_rate(self.elapsed, self.writes);
+        let downgrade_rate = Rate::maybe_rate(self.elapsed, self.downgrades);
+        let upgrade_rate = Rate::maybe_rate(self.elapsed, self.upgrades);
         write!(
             f,
             "{:>20}|{:>20}|{:>20}|{:>20}|",

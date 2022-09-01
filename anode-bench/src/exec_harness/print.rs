@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use crate::exec_harness::{BenchmarkResult, Options};
-use crate::rate::Elapsed;
+use crate::rate::Rate;
 
 impl Display for Options {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -15,7 +15,7 @@ impl Display for Options {
 
 impl Display for BenchmarkResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let work_rate = self.rate(self.iterations);
+        let work_rate = Rate::rate(self.elapsed, self.iterations);
         write!(
             f,
             "{:>20}|",
