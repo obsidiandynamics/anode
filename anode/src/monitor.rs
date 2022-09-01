@@ -6,12 +6,8 @@ use crate::remedy::Remedy;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
-pub trait MonitorGuard<'a, S: ?Sized>: DerefMut<Target = S> {}
-
-pub trait Monitor<'a, S: ?Sized> {
-    type Guard: MonitorGuard<'a, S>;
-
-    fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F) -> Self::Guard;
+pub trait Monitor<S: ?Sized> {
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F);
 
     /// Invokes the given closure exactly once, supplying the encapsulated state for alteration
     /// or observation.
@@ -107,17 +103,14 @@ impl<S: ?Sized> SpeculativeMonitor<S> {
 
     pub fn lock(&self) -> SpeculativeMonitorGuard<S> {
         SpeculativeMonitorGuard {
-            spin_guard: self.tracker.lock()
+            inner: self.tracker.lock()
         }
     }
 }
 
-//TODO return SpinGuard directly
-impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
-    type Guard = SpeculativeMonitorGuard<'a, S>;
-
+impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
     #[inline(always)]
-    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) -> SpeculativeMonitorGuard<'a, S> {
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
         let mut mutex_guard = None;
         let mut woken = false;
         loop {
@@ -130,7 +123,7 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
             let directive = f(data);
             match directive {
                 Directive::Return => {
-                    return SpeculativeMonitorGuard { spin_guard };
+                    return;
                 }
                 Directive::Wait(duration) => {
                     match mutex_guard.take() {
@@ -150,7 +143,7 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                                 // println!("timed out");
                                 let mut spin_guard = self.tracker.lock();
                                 spin_guard.waiting -= 1;
-                                return SpeculativeMonitorGuard { spin_guard };
+                                return;
                             } else {
                                 // println!("keep going");
                                 mutex_guard = Some(guard);
@@ -161,10 +154,10 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                 }
                 Directive::NotifyOne | Directive::NotifyAll => {
                     if spin_guard.waiting > 0 {
+                        drop(spin_guard);
                         match mutex_guard.take() {
                             None => {
                                 // println!("init lock");
-                                drop(spin_guard);
                                 mutex_guard = Some(self.mutex.lock().remedy());
                             }
                             Some(guard) => {
@@ -178,11 +171,11 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                                     }
                                     _ => unreachable!()
                                 }
-                                return SpeculativeMonitorGuard { spin_guard };
+                                return;
                             }
                         }
                     } else {
-                        return SpeculativeMonitorGuard { spin_guard };
+                        return;
                     }
                 }
             }
@@ -218,24 +211,22 @@ impl<T: ?Sized + fmt::Debug> fmt::Debug for SpeculativeMonitor<T> {
 }
 
 pub struct SpeculativeMonitorGuard<'a, S: ?Sized> {
-    spin_guard: SpinGuard<'a, Tracker<S>>
+    inner: SpinGuard<'a, Tracker<S>>
 }
 
 impl<'a, S> Deref for SpeculativeMonitorGuard<'a, S> {
     type Target = S;
 
     fn deref(&self) -> &Self::Target {
-        &self.spin_guard.data
+        &self.inner.data
     }
 }
 
 impl<'a, S> DerefMut for SpeculativeMonitorGuard<'a, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.spin_guard.data
+        &mut self.inner.data
     }
 }
-
-impl<'a, S> MonitorGuard<'a, S> for SpeculativeMonitorGuard<'a, S> {}
 
 #[cfg(test)]
 mod tests;
