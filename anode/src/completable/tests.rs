@@ -8,14 +8,14 @@ fn complete_later() {
     let comp = Completable::default();
     assert!(!comp.is_complete());
 
-    assert!(comp.complete(42));
+    assert!(comp.complete(42).is_none());
     assert!(comp.is_complete());
     assert_eq!(42, *comp.get());
     assert_eq!(Some(42), *comp.peek());
     assert_eq!(Some(42), *comp.try_get(SHORT_WAIT));
 
     // assigning a different value should not overwrite the existing
-    assert!(!comp.complete(69));
+    assert_eq!(Some(69), comp.complete(69));
     assert!(comp.is_complete());
     assert_eq!(Some(42), *comp.peek());
 
@@ -31,7 +31,7 @@ fn complete_at_init() {
     assert_eq!(Some(42), *comp.try_get(SHORT_WAIT));
 
     // assigning a different value should not overwrite the existing
-    assert!(!comp.complete(69));
+    assert_eq!(Some(69), comp.complete(69));
     assert!(comp.is_complete());
     assert_eq!(Some(42), *comp.peek());
 
@@ -48,8 +48,8 @@ fn await_complete() {
         let t_2_should_complete = t_2_should_complete.clone();
         thread::spawn(move || {
             t_2_should_complete.wait();
-            assert!(comp.complete(42));
-            assert!(!comp.complete(69));
+            assert!(comp.complete(42).is_none());
+            assert!(comp.complete(69).is_some());
             assert_eq!(42, *comp.get());
         })
     };

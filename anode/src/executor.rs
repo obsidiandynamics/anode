@@ -141,7 +141,7 @@ where
         let comp = comp.clone();
         let running = running.clone();
         Box::new(move || {
-            // --- code that is run on the worker thread
+            // --- code that runs on the worker thread
             let running = running.load(Ordering::Relaxed);
             let outcome = if running {
                 Outcome::Success(f())

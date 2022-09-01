@@ -90,12 +90,21 @@ impl<T> Completable<T> {
     }
 
     /// Completes this instance, assigning `val` if the instance is incomplete. Otherwise,
-    /// the existing completed value is preserved.
+    /// the existing completed value is preserved and `val` is returned to the caller.
     ///
-    /// Returns `true` if and only if `val` was assigned.
+    /// Returns `None` if the given value was persisted or `Some` containing the value if
+    /// it could not be assigned.
     #[inline]
-    pub fn complete(&self, val: T) -> bool {
-        self.complete_exclusive(|| val)
+    pub fn complete(&self, val: T) -> Option<T> {
+        let mut data = self.data.lock().remedy();
+        if data.is_none() {
+            *data = Some(val);
+            drop(data);
+            self.cond.notify_all();
+            None
+        } else {
+            Some(val)
+        }
     }
 
     #[inline]
