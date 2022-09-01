@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::sync::{Arc, Barrier};
 use std::time::Duration;
-use crate::executor::{Executor, Queue, ThreadPool};
+use crate::executor::{Executor, Queue, Submitter, ThreadPool};
 use crate::monitor::{Monitor};
 use crate::test_utils::LONG_WAIT;
 use crate::wait;
@@ -31,7 +31,7 @@ fn interleaving_writer_blocks_reader() {
 
     let t_2_write = {
         let lock = lock.clone();
-        t_2.submit(move || {
+        t_2.submitter().submit(move || {
             lock.write();
         })
     };
@@ -82,7 +82,7 @@ fn queuing_order() {
     let t_2_write = {
         let lock = lock.clone();
         let t_2_write_release = t_2_write_release.clone();
-        t_2.submit(move || {
+        t_2.submitter().submit(move || {
             let guard = lock.write();
             t_2_write_release.wait();
             drop(guard);
@@ -95,7 +95,7 @@ fn queuing_order() {
 
     let t_3_read = {
         let lock = lock.clone();
-        t_3.submit(move || {
+        t_3.submitter().submit(move || {
             lock.read();
         })
     };
@@ -108,7 +108,7 @@ fn queuing_order() {
     let t_4_read = {
         let lock = lock.clone();
         let t_4_read_release = t_4_read_release.clone();
-        t_4.submit(move || {
+        t_4.submitter().submit(move || {
             let guard = lock.read();
             t_4_read_release.wait();
             drop(guard);
@@ -121,7 +121,7 @@ fn queuing_order() {
 
     let t_5_write = {
         let lock = lock.clone();
-        t_5.submit(move || {
+        t_5.submitter().submit(move || {
             lock.write();
         })
     };

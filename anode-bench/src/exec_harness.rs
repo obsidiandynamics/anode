@@ -1,9 +1,8 @@
-use anode::executor::{Executor};
+use anode::executor::{Executor, Submitter};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc};
 use std::thread;
 use std::time::{Duration, Instant};
-use anode::spinlock::SpinLock;
 use anode::wait;
 use anode::wait::Wait;
 use crate::rate::Elapsed;
@@ -24,7 +23,7 @@ pub struct ExtendedOptions {
 impl Default for ExtendedOptions {
     fn default() -> Self {
         Self {
-            time_check_interval: 100,
+            time_check_interval: 1_000,
             debug_exits: false,
         }
     }
@@ -49,22 +48,19 @@ pub fn run<E: Executor + Send + 'static>(executor: E, opts: &Options, ext_opts: 
 
     let running = Arc::new(AtomicBool::new(true));
     let completed_tasks = Arc::new(AtomicU64::default());
-    let executor = Arc::new(SpinLock::new(executor)); //TODO remove mutex later
 
     let start_time = Instant::now();
     let load_thread = {
         let running = running.clone();
         let completed_tasks = completed_tasks.clone();
-        let executor = executor.clone();
+        let submitter = executor.submitter();
         thread::spawn(move || {
             let mut iterations = 0u64;
             while iterations % time_check_interval != 0 || running.load(Ordering::Relaxed) {
                 let completed_tasks = completed_tasks.clone();
-                let executor = executor.lock();
-                executor.submit(move || {
+                submitter.submit(move || {
                     completed_tasks.fetch_add(1, Ordering::Relaxed);
                 });
-                drop(executor);
                 iterations += 1;
             }
 

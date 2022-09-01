@@ -6,7 +6,7 @@ impl Display for Options {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "|{:>45}|{:>20}|",
+            "|{:>70}|{:>20}|",
             "duration",
             format!("{:?}", self.duration),
         )
@@ -30,7 +30,7 @@ impl Display for Separator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "|{:->45}|{:->20}|",
+            "|{:->70}|{:->20}|",
             "", "",
         )
     }
@@ -42,7 +42,7 @@ impl Display for Header {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "|{:45}|{:>20}|",
+            "|{:70}|{:>20}|",
             "", "rate (kHz)"
         )
     }

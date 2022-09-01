@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use test_utils::SHORT_WAIT;
-use crate::executor::{Executor, Queue, ThreadPool};
+use crate::executor::{Executor, Queue, Submitter, ThreadPool};
 use crate::{test_utils, wait};
 use crate::monitor::{Monitor};
 use crate::test_utils::LONG_WAIT;
@@ -53,7 +53,7 @@ fn await_pending_writer() {
     let t_2 = ThreadPool::new(1, Queue::Unbounded);
     let t_2_write = {
         let lock = lock.clone();
-        t_2.submit(move || {
+        t_2.submitter().submit(move || {
             println!("t_2 waiting for write");
             let guard_2 = lock.write();
             println!("t_2 write-acquired");
@@ -98,7 +98,7 @@ fn await_pending_writer_timeout() {
     let t_2 = ThreadPool::new(1, Queue::Unbounded);
     let t_2_write = {
         let lock = lock.clone();
-        t_2.submit(move || {
+        t_2.submitter().submit(move || {
             let guard_2 = lock.try_write(SHORT_WAIT);
             assert!(guard_2.is_none());
         })

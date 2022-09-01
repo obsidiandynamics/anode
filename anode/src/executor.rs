@@ -8,42 +8,49 @@ use crate::remedy::Remedy;
 
 pub type SubmissionOutcome<G> = Arc<Completable<Outcome<G>>>;
 
-pub trait Executor {
+pub trait Submitter: Clone + Send {
     fn submit<F, G>(&self, f: F) -> SubmissionOutcome<G>
-    where
-        F: FnOnce() -> G + Send + 'static,
-        G: Send + 'static;
+        where
+            F: FnOnce() -> G + Send + 'static,
+            G: Send + 'static;
 
     fn try_submit<F, G>(&self, f: F) -> Option<SubmissionOutcome<G>>
-    where
-        F: FnOnce() -> G + Send + 'static,
-        G: Send + 'static;
+        where
+            F: FnOnce() -> G + Send + 'static,
+            G: Send + 'static;
+}
+
+pub trait Executor {
+    type Submitter: Submitter;
+
+    fn submitter(&self) -> Self::Submitter;
 }
 
 type Task = Box<dyn FnOnce() + Send>;
 
-enum SenderImpl {
+#[derive(Clone)]
+enum SenderKind {
     Unbounded(Sender<Task>),
     Bounded(SyncSender<Task>)
 }
 
-impl SenderImpl {
+impl SenderKind {
     #[inline]
     fn send(&self, task: Task) {
         match self {
-            SenderImpl::Unbounded(sender) => sender.send(task).unwrap(),
-            SenderImpl::Bounded(sender) => sender.send(task).unwrap()
+            SenderKind::Unbounded(sender) => sender.send(task).unwrap(),
+            SenderKind::Bounded(sender) => sender.send(task).unwrap()
         }
     }
 
     #[inline]
     fn try_send(&self, task: Task) -> bool {
         match self {
-            SenderImpl::Unbounded(sender) => {
+            SenderKind::Unbounded(sender) => {
                 sender.send(task).unwrap();
                 true
             }
-            SenderImpl::Bounded(sender) => {
+            SenderKind::Bounded(sender) => {
                 match sender.try_send(task) {
                     Ok(_) => true,
                     Err(TrySendError::Full(_)) => false,
@@ -56,7 +63,7 @@ impl SenderImpl {
 
 pub struct ThreadPool {
     running: Arc<AtomicBool>,
-    sender: Option<SenderImpl>,
+    sender: Option<SenderKind>,
     threads: Option<Vec<JoinHandle<()>>>,
 }
 
@@ -75,11 +82,11 @@ impl ThreadPool {
             match queue {
                 Queue::Unbounded => {
                     let (tx, rx) = mpsc::channel::<Task>();
-                    (SenderImpl::Unbounded(tx), rx)
+                    (SenderKind::Unbounded(tx), rx)
                 }
                 Queue::Bounded(bound) => {
                     let (tx, rx) = mpsc::sync_channel::<Task>(bound);
-                    (SenderImpl::Bounded(tx), rx)
+                    (SenderKind::Bounded(tx), rx)
                 }
             }
         };
@@ -124,7 +131,7 @@ impl Drop for ThreadPool {
 }
 
 #[inline]
-fn prepare_task<F, G>(pool: &ThreadPool, f: F) -> (SubmissionOutcome<G>, Task)
+fn prepare_task<F, G>(running: &Arc<AtomicBool>, f: F) -> (SubmissionOutcome<G>, Task)
 where
     F: FnOnce() -> G + Send + 'static,
     G: Send + 'static,
@@ -132,7 +139,7 @@ where
     let comp = Arc::new(Completable::default());
     let task = {
         let comp = comp.clone();
-        let running = pool.running.clone();
+        let running = running.clone();
         Box::new(move || {
             // --- code that is run on the worker thread
             let running = running.load(Ordering::Relaxed);
@@ -148,27 +155,45 @@ where
     (comp, task)
 }
 
-impl Executor for ThreadPool {
+#[derive(Clone)]
+pub struct ThreadPoolSubmitter {
+    running: Arc<AtomicBool>,
+    sender: SenderKind
+}
+
+impl Submitter for ThreadPoolSubmitter {
     #[inline]
     fn submit<F, G>(&self, f: F) -> SubmissionOutcome<G>
-    where
-        F: FnOnce() -> G + Send + 'static,
-        G: Send + 'static,
+        where
+            F: FnOnce() -> G + Send + 'static,
+            G: Send + 'static,
     {
-        let (comp, task) = prepare_task(self, f);
-        self.sender.as_ref().unwrap().send(task);
+        let (comp, task) = prepare_task(&self.running, f);
+        self.sender.send(task);
         comp
     }
 
     #[inline]
     fn try_submit<F, G>(&self, f: F) -> Option<SubmissionOutcome<G>>
-    where
-        F: FnOnce() -> G + Send + 'static,
-        G: Send + 'static,
+        where
+            F: FnOnce() -> G + Send + 'static,
+            G: Send + 'static,
     {
-        let (comp, task) = prepare_task(self, f);
-        let enqueued = self.sender.as_ref().unwrap().try_send(task);
+        let (comp, task) = prepare_task(&self.running, f);
+        let enqueued = self.sender.try_send(task);
         if enqueued { Some(comp) } else { None }
+    }
+}
+
+impl Executor for ThreadPool {
+    type Submitter = ThreadPoolSubmitter;
+
+    #[inline]
+    fn submitter(&self) -> Self::Submitter {
+        ThreadPoolSubmitter {
+            running: self.running.clone(),
+            sender: self.sender.as_ref().unwrap().clone()
+        }
     }
 }
 
