@@ -7,22 +7,22 @@ use crate::backoff::ExpBackoff;
 use crate::inf_iterator::{InfIterator, IntoInfIterator};
 use crate::rand::{*, LazyRand64, Xorshift};
 
-unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
-unsafe impl<T: ?Sized + Send> Sync for SpinLock<T> {}
+unsafe impl<T: ?Sized + Send> Send for SpinMutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for SpinMutex<T> {}
 unsafe impl<T: ?Sized + Sync> Sync for SpinGuard<'_, T> {}
 
-pub struct SpinLock<T: ?Sized> {
+pub struct SpinMutex<T: ?Sized> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
 }
 
 pub struct SpinGuard<'a, T: ?Sized> {
-    lock: &'a SpinLock<T>,
+    lock: &'a SpinMutex<T>,
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
 }
 
-impl<T> SpinLock<T> {
+impl<T> SpinMutex<T> {
     #[inline]
     pub fn new(t: T) -> Self {
         Self {
@@ -58,7 +58,7 @@ impl<'a, T: ?Sized> DerefMut for SpinGuard<'a, T> {
     }
 }
 
-impl<T: ?Sized> SpinLock<T> {
+impl<T: ?Sized> SpinMutex<T> {
     #[inline]
     pub fn lock(&self) -> SpinGuard<T> {
         // a [TTAS](https://en.wikipedia.org/wiki/Test_and_test-and-set) implementation that does not result in
@@ -98,7 +98,7 @@ impl<T: ?Sized> SpinLock<T> {
 
     /// Returns a mutable reference to the underlying data.
     ///
-    /// Since this call borrows the [`SpinLock`] mutably, no actual locking needs to
+    /// Since this call borrows the [`SpinMutex`] mutably, no actual locking needs to
     /// take place---the mutable borrow statically guarantees no locks exist.
     #[inline]
     pub fn get_mut(&mut self) -> &mut T {
@@ -106,7 +106,7 @@ impl<T: ?Sized> SpinLock<T> {
     }
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinLock<T> {
+impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinMutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut d = f.debug_struct("SpinLock");
         match self.try_lock() {

@@ -1,23 +1,23 @@
 use std::any;
 use std::time::Duration;
-use anode::spinlock::SpinLock;
+use anode::spin_mutex::SpinMutex;
 use anode_bench::lock_spec::LockSpec;
 use anode_bench::quad_harness;
 use anode_bench::quad_harness::{Addable, BoxedInt, ExtendedOptions, Options};
 
 #[test]
 fn quad_micro_bench_int() {
-    __quad_micro_bench::<i64, SpinLock<_>>();
+    __quad_micro_bench::<i64, SpinMutex<_>>();
 }
 
 #[test]
 fn quad_micro_bench_boxed_int() {
-    __quad_micro_bench::<BoxedInt, SpinLock<_>>();
+    __quad_micro_bench::<BoxedInt, SpinMutex<_>>();
 }
 
 #[test]
 fn quad_micro_bench_string() {
-    __quad_micro_bench::<String, SpinLock<_>>();
+    __quad_micro_bench::<String, SpinMutex<_>>();
 }
 
 fn __quad_micro_bench<T: Addable, L: for<'a> LockSpec<'a, T = T> + 'static>() {

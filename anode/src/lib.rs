@@ -7,7 +7,7 @@ pub mod inf_iterator;
 pub mod monitor;
 pub mod remedy;
 pub mod rand;
-pub mod spinlock;
+pub mod spin_mutex;
 pub mod zlock;
 pub mod wait;
 

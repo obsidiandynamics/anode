@@ -1,10 +1,10 @@
 use std::sync::{Arc, Barrier};
-use crate::spinlock::SpinLock;
+use crate::spin_mutex::SpinMutex;
 use crate::test_utils;
 
 #[test]
 fn cycle() {
-    let lock = SpinLock::new(0);
+    let lock = SpinMutex::new(0);
     let mut guard_1 = lock.lock();
     assert_eq!(0, *guard_1);
     *guard_1 = 42;
@@ -22,7 +22,7 @@ fn cycle() {
 
 #[test]
 fn borrow_mut() {
-    let mut lock = SpinLock::new(0);
+    let mut lock = SpinMutex::new(0);
     let val  = lock.get_mut();
     *val = 42;
 
@@ -32,7 +32,7 @@ fn borrow_mut() {
 
 #[test]
 fn into_inner() {
-    let lock = SpinLock::new(0);
+    let lock = SpinMutex::new(0);
     let mut guard = lock.lock();
     assert_eq!(0, *guard);
     *guard = 42;
@@ -44,7 +44,7 @@ fn into_inner() {
 #[test]
 fn await_release() {
     for _ in 0..10 {
-        let lock = Arc::new(SpinLock::new(0));
+        let lock = Arc::new(SpinMutex::new(0));
         let mut guard_1 = lock.lock();
         *guard_1 = 42;
 
@@ -84,7 +84,7 @@ fn await_release() {
 
 #[test]
 fn debug() {
-    let lock = SpinLock::new(5);
+    let lock = SpinMutex::new(5);
     println!("{:?}", lock);
     assert!(format!("{:?}", lock).contains("SpinLock"));
     assert!(format!("{:?}", lock).contains("5"));

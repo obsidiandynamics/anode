@@ -1,4 +1,4 @@
-use crate::spinlock::SpinLock;
+use crate::spin_mutex::SpinMutex;
 use crate::remedy;
 use crate::remedy::Remedy;
 use std::sync::{Condvar, Mutex};
@@ -67,14 +67,14 @@ struct Tracker<S: ?Sized> {
 pub struct SpeculativeMonitor<S: ?Sized> {
     mutex: Mutex<()>,
     cond: Condvar,
-    tracker: SpinLock<Tracker<S>>,
+    tracker: SpinMutex<Tracker<S>>,
 }
 
 impl<S> SpeculativeMonitor<S> {
     #[inline(always)]
     pub fn new(s: S) -> Self {
         Self {
-            tracker: SpinLock::new(Tracker {
+            tracker: SpinMutex::new(Tracker {
                 data: s,
                 waiting: 0,
             }),

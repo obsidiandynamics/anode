@@ -6,7 +6,7 @@ use anode::zlock::ZLock;
 use anode_bench::quad_harness::{ExtendedOptions, Options};
 use anode_bench::{args, quad_harness};
 use std::time::Duration;
-use anode::spinlock::SpinLock;
+use anode::spin_mutex::SpinMutex;
 use anode_bench::lock_spec::LockSpec;
 use anode_bench::quad_harness::print::{Header, Separator};
 
@@ -34,7 +34,7 @@ fn main() {
                         run::<ZLock::<_, LegacyWriteBiased>>("anode::rwlock::RwLock<LegacyWriteBiased>", &opts);
                         run::<ZLock::<_, ArrivalOrdered>>("anode::rwlock::RwLock<ArrivalOrdered>", &opts);
                         run::<ZLock::<_, Stochastic>>("anode::rwlock::RwLock<Stochastic>", &opts);
-                        run::<SpinLock<_>>("anode::spin_mutex::SpinMutex", &opts);
+                        run::<SpinMutex<_>>("anode::spin_mutex::SpinMutex", &opts);
                         run::<RwLock<_>>("std::sync::RwLock", &opts);
                         run::<Mutex<_>>("std::sync::Mutex", &opts);
                     }

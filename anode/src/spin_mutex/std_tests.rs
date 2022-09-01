@@ -1,7 +1,7 @@
 //! A test suite "borrowed" the [standard library](https://github.com/rust-lang/rust/blob/master/library/std/src/sync/mutex/tests.rs).
 
 use crate::chalice::Chalice;
-use crate::spinlock::SpinLock;
+use crate::spin_mutex::SpinMutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::{Arc};
@@ -12,7 +12,7 @@ struct NonCopy(i32);
 
 #[test]
 fn smoke() {
-    let m = SpinLock::new(());
+    let m = SpinMutex::new(());
     drop(m.lock());
     drop(m.lock());
 }
@@ -22,9 +22,9 @@ fn lots_and_lots() {
     const J: u32 = 1000;
     const K: u32 = 3;
 
-    let m = Arc::new(SpinLock::new(0));
+    let m = Arc::new(SpinMutex::new(0));
 
-    fn inc(m: &SpinLock<u32>) {
+    fn inc(m: &SpinMutex<u32>) {
         for _ in 0..J {
             *m.lock() += 1;
         }
@@ -55,13 +55,13 @@ fn lots_and_lots() {
 
 #[test]
 fn try_lock() {
-    let m = SpinLock::new(());
+    let m = SpinMutex::new(());
     *m.try_lock().unwrap() = ();
 }
 
 #[test]
 fn test_into_inner() {
-    let m = SpinLock::new(NonCopy(10));
+    let m = SpinMutex::new(NonCopy(10));
     assert_eq!(m.into_inner(), NonCopy(10));
 }
 
@@ -74,7 +74,7 @@ fn test_into_inner_drop() {
         }
     }
     let num_drops = Arc::new(AtomicUsize::new(0));
-    let m = SpinLock::new(Foo(num_drops.clone()));
+    let m = SpinMutex::new(Foo(num_drops.clone()));
     assert_eq!(num_drops.load(Ordering::SeqCst), 0);
     {
         let _inner = m.into_inner();
@@ -85,14 +85,14 @@ fn test_into_inner_drop() {
 
 #[test]
 fn test_get_mut() {
-    let mut m = SpinLock::new(NonCopy(10));
+    let mut m = SpinMutex::new(NonCopy(10));
     *m.get_mut() = NonCopy(20);
     assert_eq!(m.into_inner(), NonCopy(20));
 }
 
 #[test]
 fn test_mutex_arc_poison() {
-    let arc = Arc::new(SpinLock::new(Chalice::new(1)));
+    let arc = Arc::new(SpinMutex::new(Chalice::new(1)));
     let arc2 = arc.clone();
     let _ = thread::spawn(move || {
         let mut lock_guard = arc2.lock();
@@ -107,8 +107,8 @@ fn test_mutex_arc_poison() {
 fn test_mutex_arc_nested() {
     // Tests nested mutexes and access
     // to underlying data.
-    let arc = Arc::new(SpinLock::new(1));
-    let arc2 = Arc::new(SpinLock::new(arc));
+    let arc = Arc::new(SpinMutex::new(1));
+    let arc2 = Arc::new(SpinMutex::new(arc));
     let (tx, rx) = channel();
     let _t = thread::spawn(move || {
         let lock = arc2.lock();
@@ -121,11 +121,11 @@ fn test_mutex_arc_nested() {
 
 #[test]
 fn test_mutex_arc_access_in_unwind() {
-    let arc = Arc::new(SpinLock::new(1));
+    let arc = Arc::new(SpinMutex::new(1));
     let arc2 = arc.clone();
     let _ = thread::spawn(move || -> () {
         struct Unwinder {
-            i: Arc<SpinLock<i32>>,
+            i: Arc<SpinMutex<i32>>,
         }
         impl Drop for Unwinder {
             fn drop(&mut self) {
@@ -142,7 +142,7 @@ fn test_mutex_arc_access_in_unwind() {
 
 #[test]
 fn test_mutex_unsized() {
-    let mutex: &SpinLock<[i32]> = &SpinLock::new([1, 2, 3]);
+    let mutex: &SpinMutex<[i32]> = &SpinMutex::new([1, 2, 3]);
     {
         let b = &mut *mutex.lock();
         b[0] = 4;

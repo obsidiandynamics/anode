@@ -1,4 +1,4 @@
-use anode::spinlock::{SpinGuard, SpinLock};
+use anode::spin_mutex::{SpinGuard, SpinMutex};
 use anode::remedy::Remedy;
 use anode::zlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, ZLock};
 use std::marker::PhantomData;
@@ -152,7 +152,7 @@ impl<'a, T: Sync + Send + 'a> LockSpec<'a> for RwLock<T> {
 
 impl<'a, T> WriteGuardSpec<'a, T> for SpinGuard<'a, T> {}
 
-impl<'a, T: Sync + Send + 'a> LockSpec<'a> for SpinLock<T> {
+impl<'a, T: Sync + Send + 'a> LockSpec<'a> for SpinMutex<T> {
     type T = T;
     type R = NoReadGuard<T>;
     type W = SpinGuard<'a, T>;
