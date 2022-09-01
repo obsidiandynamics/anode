@@ -28,12 +28,12 @@ fn main() {
                         println!("{}", Separator());
                         println!("{}", opts);
                         println!("{}", Header());
-                        run::<ZLock::<_, ReadBiased>>("anode::rwlock::RwLock<ReadBiased>", &opts);
-                        run::<ZLock::<_, LegacyReadBiased>>("anode::rwlock::RwLock<LegacyReadBiased>", &opts);
-                        run::<ZLock::<_, WriteBiased>>("anode::rwlock::RwLock<WriteBiased>", &opts);
-                        run::<ZLock::<_, LegacyWriteBiased>>("anode::rwlock::RwLock<LegacyWriteBiased>", &opts);
-                        run::<ZLock::<_, ArrivalOrdered>>("anode::rwlock::RwLock<ArrivalOrdered>", &opts);
-                        run::<ZLock::<_, Stochastic>>("anode::rwlock::RwLock<Stochastic>", &opts);
+                        run::<ZLock::<_, ReadBiased>>("anode::rwlock::ZLock<ReadBiased>", &opts);
+                        run::<ZLock::<_, LegacyReadBiased>>("anode::rwlock::ZLock<LegacyReadBiased>", &opts);
+                        run::<ZLock::<_, WriteBiased>>("anode::rwlock::ZLock<WriteBiased>", &opts);
+                        run::<ZLock::<_, LegacyWriteBiased>>("anode::rwlock::ZLock<LegacyWriteBiased>", &opts);
+                        run::<ZLock::<_, ArrivalOrdered>>("anode::rwlock::ZLock<ArrivalOrdered>", &opts);
+                        run::<ZLock::<_, Stochastic>>("anode::rwlock::ZLock<Stochastic>", &opts);
                         run::<SpinMutex<_>>("anode::spin_mutex::SpinMutex", &opts);
                         run::<RwLock<_>>("std::sync::RwLock", &opts);
                         run::<Mutex<_>>("std::sync::Mutex", &opts);

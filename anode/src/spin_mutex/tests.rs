@@ -84,10 +84,10 @@ fn await_release() {
 
 #[test]
 fn debug() {
-    let lock = SpinMutex::new(5);
+    let lock = SpinMutex::new("foobar");
     println!("{:?}", lock);
-    assert!(format!("{:?}", lock).contains("SpinLock"));
-    assert!(format!("{:?}", lock).contains("5"));
+    assert!(format!("{:?}", lock).contains("SpinMutex"));
+    assert!(format!("{:?}", lock).contains("foobar"));
 
     let guard = lock.lock();
     println!("{:?}", lock);

@@ -108,7 +108,7 @@ impl<T: ?Sized> SpinMutex<T> {
 
 impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinMutex<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut d = f.debug_struct("SpinLock");
+        let mut d = f.debug_struct("SpinMutex");
         match self.try_lock() {
             None => {
                 struct LockedPlaceholder;

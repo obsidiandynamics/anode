@@ -1,11 +1,17 @@
-use crate::spin_mutex::SpinMutex;
+use std::fmt;
+use std::ops::{Deref, DerefMut};
+use crate::spin_mutex::{SpinGuard, SpinMutex};
 use crate::remedy;
 use crate::remedy::Remedy;
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
-pub trait Monitor<S: ?Sized> {
-    fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F);
+pub trait MonitorGuard<'a, S: ?Sized>: DerefMut<Target = S> {}
+
+pub trait Monitor<'a, S: ?Sized> {
+    type Guard: MonitorGuard<'a, S>;
+
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F) -> Self::Guard;
 
     /// Invokes the given closure exactly once, supplying the encapsulated state for alteration
     /// or observation.
@@ -70,6 +76,12 @@ pub struct SpeculativeMonitor<S: ?Sized> {
     tracker: SpinMutex<Tracker<S>>,
 }
 
+impl<S: Default> Default for SpeculativeMonitor<S> {
+    fn default() -> Self {
+        Self::new(S::default())
+    }
+}
+
 impl<S> SpeculativeMonitor<S> {
     #[inline(always)]
     pub fn new(s: S) -> Self {
@@ -82,17 +94,30 @@ impl<S> SpeculativeMonitor<S> {
             cond: Default::default(),
         }
     }
+
+    pub fn into_inner(self) -> S {
+        self.tracker.into_inner().data
+    }
 }
 
 impl<S: ?Sized> SpeculativeMonitor<S> {
     pub fn num_waiting(&self) -> u32 {
         self.tracker.lock().waiting
     }
+
+    pub fn lock(&self) -> SpeculativeMonitorGuard<S> {
+        SpeculativeMonitorGuard {
+            spin_guard: self.tracker.lock()
+        }
+    }
 }
 
-impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
+//TODO return SpinGuard directly
+impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
+    type Guard = SpeculativeMonitorGuard<'a, S>;
+
     #[inline(always)]
-    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) -> SpeculativeMonitorGuard<'a, S> {
         let mut mutex_guard = None;
         let mut woken = false;
         loop {
@@ -105,7 +130,7 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
             let directive = f(data);
             match directive {
                 Directive::Return => {
-                    return;
+                    return SpeculativeMonitorGuard { spin_guard };
                 }
                 Directive::Wait(duration) => {
                     match mutex_guard.take() {
@@ -125,7 +150,7 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
                                 // println!("timed out");
                                 let mut spin_guard = self.tracker.lock();
                                 spin_guard.waiting -= 1;
-                                return;
+                                return SpeculativeMonitorGuard { spin_guard };
                             } else {
                                 // println!("keep going");
                                 mutex_guard = Some(guard);
@@ -136,10 +161,10 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
                 }
                 Directive::NotifyOne | Directive::NotifyAll => {
                     if spin_guard.waiting > 0 {
-                        drop(spin_guard);
                         match mutex_guard.take() {
                             None => {
                                 // println!("init lock");
+                                drop(spin_guard);
                                 mutex_guard = Some(self.mutex.lock().remedy());
                             }
                             Some(guard) => {
@@ -153,11 +178,11 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
                                     }
                                     _ => unreachable!()
                                 }
-                                return;
+                                return SpeculativeMonitorGuard { spin_guard };
                             }
                         }
                     } else {
-                        return;
+                        return SpeculativeMonitorGuard { spin_guard };
                     }
                 }
             }
@@ -170,6 +195,47 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
         f(&mut spin_guard.data);
     }
 }
+
+impl<T: ?Sized + fmt::Debug> fmt::Debug for SpeculativeMonitor<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut d = f.debug_struct("SpinLock");
+        match self.tracker.try_lock() {
+            None => {
+                struct LockedPlaceholder;
+                impl fmt::Debug for LockedPlaceholder {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str("<locked>")
+                    }
+                }
+                d.field("data", &LockedPlaceholder);
+            }
+            Some(guard) => {
+                d.field("data", &&(*guard).data);
+            }
+        }
+        d.finish_non_exhaustive()
+    }
+}
+
+pub struct SpeculativeMonitorGuard<'a, S: ?Sized> {
+    spin_guard: SpinGuard<'a, Tracker<S>>
+}
+
+impl<'a, S> Deref for SpeculativeMonitorGuard<'a, S> {
+    type Target = S;
+
+    fn deref(&self) -> &Self::Target {
+        &self.spin_guard.data
+    }
+}
+
+impl<'a, S> DerefMut for SpeculativeMonitorGuard<'a, S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.spin_guard.data
+    }
+}
+
+impl<'a, S> MonitorGuard<'a, S> for SpeculativeMonitorGuard<'a, S> {}
 
 #[cfg(test)]
 mod tests;

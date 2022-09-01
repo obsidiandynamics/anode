@@ -1,19 +1,15 @@
 use crate::deadline::Deadline;
-use crate::remedy;
 use std::ops::{Deref};
-use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
-use crate::remedy::Remedy;
+use crate::monitor::{Directive, Monitor, SpeculativeMonitor, SpeculativeMonitorGuard};
 
 #[derive(Default, Debug)]
 pub struct Completable<T> {
-    cond: Condvar,
-    data: Mutex<Option<T>>,
+    monitor: SpeculativeMonitor<Option<T>>,
 }
 
-#[derive(Debug)]
 pub struct Completed<'a, T> {
-    guard: MutexGuard<'a, Option<T>>,
+    guard: SpeculativeMonitorGuard<'a, Option<T>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -62,8 +58,7 @@ impl<T> Completable<T> {
     #[inline]
     pub fn new(val: T) -> Self {
         Self {
-            cond: Condvar::default(),
-            data: Mutex::new(Some(val))
+            monitor: SpeculativeMonitor::new(Some(val))
         }
     }
 
@@ -77,16 +72,20 @@ impl<T> Completable<T> {
     ///
     /// Returns `true` if and only if `f` was invoked.
     #[inline]
-    pub fn complete_exclusive(&self, f: impl FnOnce() -> T) -> bool {
-        let mut data = self.data.lock().remedy();
-        if data.is_none() {
-            *data = Some(f());
-            drop(data);
-            self.cond.notify_all();
-            true
-        } else {
-            false
-        }
+    pub fn complete_exclusive<F: FnOnce() -> T>(&self, f: F) -> bool {
+        let mut f = Some(f);
+        self.monitor.enter(|val| {
+            if val.is_none() {
+                *val = Some(f.take().unwrap()());
+            }
+
+            if f.is_none() {
+                Directive::NotifyAll
+            } else {
+                Directive::Return
+            }
+        });
+        f.is_none()
     }
 
     /// Completes this instance, assigning `val` if the instance is incomplete. Otherwise,
@@ -96,20 +95,24 @@ impl<T> Completable<T> {
     /// it could not be assigned.
     #[inline]
     pub fn complete(&self, val: T) -> Option<T> {
-        let mut data = self.data.lock().remedy();
-        if data.is_none() {
-            *data = Some(val);
-            drop(data);
-            self.cond.notify_all();
-            None
-        } else {
-            Some(val)
-        }
+        let mut returned = Some(val);
+        self.monitor.enter(|inner| {
+            if inner.is_none() {
+                *inner = returned.take();
+            }
+
+            if returned.is_none() {
+                Directive::NotifyAll
+            } else {
+                Directive::Return
+            }
+        });
+        returned
     }
 
     #[inline]
     pub fn is_complete(&self) -> bool {
-        self.data.lock().remedy().is_some()
+        self.monitor.compute(Option::is_some)
     }
 
     #[inline]
@@ -130,25 +133,23 @@ impl<T> Completable<T> {
     }
 
     /// [`__try_get`] is never exposed directly to avoid coupling the caller to the
-    /// [`MutexGuard`] type, which might change in future implementations. Instead, the return
+    /// [`SpeculativeMonitorGuard`] type, which might change in future implementations. Instead, the return
     /// value is publicly exposed as a [`Deref`] trait.
     #[inline]
-    fn __try_get(&self, duration: Duration) -> MutexGuard<Option<T>> {
+    fn __try_get(&self, duration: Duration) -> SpeculativeMonitorGuard<Option<T>> {
         let mut deadline = Deadline::lazy_after(duration);
-        let mut data = self.data.lock().remedy();
-        while data.is_none() {
-            let (guard, timed_out) =
-                remedy::cond_wait_remedy(&self.cond, data, deadline.remaining());
-            if timed_out {
-                return guard;
+        self.monitor.enter(|state| {
+            if state.is_none() {
+                Directive::Wait(deadline.remaining())
+            } else {
+                Directive::Return
             }
-            data = guard;
-        }
-        data
+        });
+        self.monitor.lock()
     }
 
     pub fn into_inner(self) -> Option<T> {
-        self.data.into_inner().remedy()
+        self.monitor.into_inner()
     }
 }
 
