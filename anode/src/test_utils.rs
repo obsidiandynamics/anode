@@ -1,4 +1,3 @@
-use crate::multilock::Fairness;
 use std::cell::{Ref, RefCell, RefMut};
 use std::fmt::{Debug, Formatter};
 use std::panic::RefUnwindSafe;
@@ -15,21 +14,6 @@ use crate::wait::Wait;
 pub const SHORT_WAIT: Duration = Duration::from_micros(1);
 pub const LONG_WAIT: Duration = Duration::from_secs(10);
 pub const CHECK_WAIT: Duration = Duration::from_millis(5);
-
-pub const FAIRNESS_VARIANTS: [FairnessVariant; 3] = [
-    FairnessVariant(Fairness::ReadBiased),
-    FairnessVariant(Fairness::WriteBiased),
-    FairnessVariant(Fairness::ArrivalOrdered),
-];
-
-pub struct FairnessVariant(Fairness);
-
-impl From<FairnessVariant> for Fairness {
-    fn from(fv: FairnessVariant) -> Self {
-        println!("test running with fairness {:?}", fv.0);
-        fv.0
-    }
-}
 
 pub struct UnwindableRefCell<T: ?Sized> {
     inner: RefCell<T>,
@@ -100,52 +84,5 @@ impl<T: Debug> Debug for NoPrettyPrint<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         // {:#?} never used here even if dbg!() specifies it
         write!(f, "{:?}", self.0)
-    }
-}
-
-pub trait Addable: Send + Sync {
-    fn get(&self) -> i64;
-
-    fn add(&self, amount: i64) -> Self;
-}
-
-#[derive(Debug)]
-pub struct BoxedInt(Box<i64>);
-
-impl BoxedInt {
-    pub fn new(v: i64) -> Self {
-        Self(Box::new(v))
-    }
-}
-
-impl Addable for BoxedInt {
-    fn get(&self) -> i64 {
-        *self.0
-    }
-
-    fn add(&self, amount: i64) -> Self {
-        let current = self.get();
-        Self::new(current + amount)
-    }
-}
-
-impl Addable for i64 {
-    fn get(&self) -> i64 {
-        *self
-    }
-
-    fn add(&self, amount: i64) -> Self {
-        self + amount
-    }
-}
-
-impl Addable for String {
-    fn get(&self) -> i64 {
-        self.parse().unwrap()
-    }
-
-    fn add(&self, amount: i64) -> Self {
-        let current = self.get();
-        (current + amount).to_string()
     }
 }
