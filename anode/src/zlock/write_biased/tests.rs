@@ -7,11 +7,11 @@ use crate::{test_utils, wait};
 use crate::monitor::{Monitor};
 use crate::test_utils::LONG_WAIT;
 use crate::wait::{Wait, WaitResult};
-use crate::xlock::{WriteBiased, XLock};
+use crate::zlock::{WriteBiased, ZLock};
 
 #[test]
 fn timeout_in_write_unblocks_readers() {
-    let lock = XLock::<_, WriteBiased>::new(0);
+    let lock = ZLock::<_, WriteBiased>::new(0);
     let guard_1 = lock.read();
     let guard_2 = lock.read();
 
@@ -29,7 +29,7 @@ fn timeout_in_write_unblocks_readers() {
 
 #[test]
 fn timeout_in_upgrade_unblocks_readers() {
-    let lock = XLock::<_, WriteBiased>::new(0);
+    let lock = ZLock::<_, WriteBiased>::new(0);
     let guard_1 = lock.read();
     let guard_2 = lock.read();
 
@@ -47,7 +47,7 @@ fn timeout_in_upgrade_unblocks_readers() {
 
 #[test]
 fn await_pending_writer() {
-    let lock = Arc::new(XLock::<_, WriteBiased>::new(0));
+    let lock = Arc::new(ZLock::<_, WriteBiased>::new(0));
     let guard_1 = lock.read();
 
     let t_2 = ThreadPool::new(1, Queue::Unbounded);
@@ -92,7 +92,7 @@ fn await_pending_writer() {
 
 #[test]
 fn await_pending_writer_timeout() {
-    let lock = Arc::new(XLock::<_, WriteBiased>::new(0));
+    let lock = Arc::new(ZLock::<_, WriteBiased>::new(0));
     let guard_1 = lock.read();
 
     let t_2 = ThreadPool::new(1, Queue::Unbounded);
@@ -117,7 +117,7 @@ fn await_pending_writer_timeout() {
     drop(guard_1);
 }
 
-impl<T> XLock<T, WriteBiased> {
+impl<T> ZLock<T, WriteBiased> {
     fn is_writer_pending(&self) -> bool {
         self.sync.monitor.compute(|state| state.writer_pending)
     }

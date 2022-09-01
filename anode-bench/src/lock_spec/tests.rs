@@ -1,17 +1,17 @@
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use anode::xlock::{ReadBiased, XLock};
+use anode::zlock::{ReadBiased, ZLock};
 use crate::lock_spec::LockSpec;
 
 #[test]
 fn conformance() {
-    let lock = XLock::<_, ReadBiased>::new(0);
+    let lock = ZLock::<_, ReadBiased>::new(0);
     takes_borrowed(&lock);
 
     takes_owned(lock);
 
-    takes_owned_alt(XLock::<_, ReadBiased>::new(0));
+    takes_owned_alt(ZLock::<_, ReadBiased>::new(0));
 }
 
 fn takes_borrowed<'a, L: LockSpec<'a, T=u64>>(lock: &'a L) {

@@ -22,8 +22,8 @@ pub use legacy_read_biased::LegacyReadBiased;
 pub use legacy_write_biased::LegacyWriteBiased;
 pub use legacy_arrival_ordered::LegacyArrivalOrdered;
 
-unsafe impl<T: ?Sized + Send, M: Moderator> Send for XLock<T, M> {}
-unsafe impl<T: ?Sized + Send + Sync, M: Moderator> Sync for XLock<T, M> {}
+unsafe impl<T: ?Sized + Send, M: Moderator> Send for ZLock<T, M> {}
+unsafe impl<T: ?Sized + Send + Sync, M: Moderator> Sync for ZLock<T, M> {}
 unsafe impl<T: ?Sized + Sync, M: Moderator> Sync for LockReadGuard<'_, T, M> {}
 unsafe impl<T: ?Sized + Sync, M: Moderator> Sync for LockWriteGuard<'_, T, M> {}
 
@@ -45,12 +45,12 @@ pub trait Moderator: Debug {
     fn try_upgrade(sync: &Self::Sync, duration: Duration) -> bool;
 }
 
-pub struct XLock<T: ?Sized, M: Moderator> {
+pub struct ZLock<T: ?Sized, M: Moderator> {
     sync: M::Sync,
     data: UnsafeCell<T>,
 }
 
-impl<T, M: Moderator> XLock<T, M> {
+impl<T, M: Moderator> ZLock<T, M> {
     #[inline]
     pub fn new(t: T) -> Self {
         Self {
@@ -64,7 +64,7 @@ impl<T, M: Moderator> XLock<T, M> {
     }
 }
 
-impl<T: ?Sized, M: Moderator> XLock<T, M> {
+impl<T: ?Sized, M: Moderator> ZLock<T, M> {
     #[inline]
     pub fn read(&self) -> LockReadGuard<'_, T, M> {
         self.try_read(Duration::MAX).unwrap()
@@ -155,7 +155,7 @@ impl<T: ?Sized, M: Moderator> XLock<T, M> {
 
 pub struct LockReadGuard<'a, T: ?Sized + 'a, M: Moderator + 'a> {
     data: NonNull<T>,
-    lock: &'a XLock<T, M>,
+    lock: &'a ZLock<T, M>,
     locked: bool,
 
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
@@ -200,7 +200,7 @@ impl<T: ?Sized, M: Moderator> Deref for LockReadGuard<'_, T, M> {
 }
 
 pub struct LockWriteGuard<'a, T: ?Sized + 'a, M: Moderator + 'a> {
-    lock: &'a XLock<T, M>,
+    lock: &'a ZLock<T, M>,
     locked: bool,
     /// Emulates !Send for the struct. (Until issue 68318 -- negative trait bounds -- is resolved.)
     __no_send: PhantomData<*const ()>,
@@ -282,9 +282,9 @@ impl<W, R> UpgradeOutcome<W, R> {
     }
 }
 
-impl<T: ?Sized + fmt::Debug, M: Moderator> fmt::Debug for XLock<T, M> {
+impl<T: ?Sized + fmt::Debug, M: Moderator> fmt::Debug for ZLock<T, M> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut d = f.debug_struct("XLock");
+        let mut d = f.debug_struct("ZLock");
         match self.try_read(Duration::ZERO) {
             None => {
                 struct LockedPlaceholder;

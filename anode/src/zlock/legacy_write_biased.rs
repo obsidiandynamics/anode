@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::remedy;
 use crate::remedy::Remedy;
-use crate::xlock::Moderator;
+use crate::zlock::Moderator;
 
 #[derive(Debug)]
 pub struct LegacyWriteBiased;

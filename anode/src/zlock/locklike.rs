@@ -1,4 +1,4 @@
-use crate::xlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, Moderator, ReadBiased, Stochastic, UpgradeOutcome, WriteBiased, XLock};
+use crate::zlock::{ArrivalOrdered, LockReadGuard, LockWriteGuard, Moderator, ReadBiased, Stochastic, UpgradeOutcome, WriteBiased, ZLock};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
@@ -54,7 +54,7 @@ pub trait LocklikeSized<'a, T>: Locklike<'a, T> {
     fn into_inner(self: Box<Self>) -> T;
 }
 
-impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for XLock<T, M> {
+impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for ZLock<T, M> {
     type R = LockReadGuard<'a, T, M>;
     type W = LockWriteGuard<'a, T, M>;
 
@@ -84,14 +84,14 @@ impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for XL
     }
 }
 
-impl<T, M: Moderator> XLock<T, M> {
+impl<T, M: Moderator> ZLock<T, M> {
     #[inline]
     fn lock_into_inner(self) -> T {
         self.into_inner()
     }
 }
 
-impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LocklikeSized<'a, T> for XLock<T, M> {
+impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LocklikeSized<'a, T> for ZLock<T, M> {
     #[inline]
     fn into_inner(self: Box<Self>) -> T {
         self.lock_into_inner()
@@ -144,7 +144,7 @@ impl<'a, T: ?Sized, M: Moderator> LockWriteGuardSurrogate<'a, T> for LockWriteGu
     }
 }
 
-struct PolyLock<T: ?Sized, M: Moderator>(XLock<T, M>);
+struct PolyLock<T: ?Sized, M: Moderator>(ZLock<T, M>);
 
 impl<'a, T: ?Sized + Sync + Send + 'a, M: Moderator + 'a> Locklike<'a, T> for PolyLock<T, M> {
     type R = DynLockReadGuard<'a, T>;
@@ -278,30 +278,30 @@ impl ModeratorKind {
     pub fn make_lock_for_test<T: Sync + Send + 'static>(&self, t: T) -> LockBoxSized<T> {
         println!("test running with moderator {:?}", self);
         match self {
-            ModeratorKind::ReadBiased => Box::new(PolyLock(XLock::<_, ReadBiased>::new(t))),
-            ModeratorKind::WriteBiased => Box::new(PolyLock(XLock::<_, WriteBiased>::new(t))),
-            ModeratorKind::ArrivalOrdered => Box::new(PolyLock(XLock::<_, ArrivalOrdered>::new(t))),
-            ModeratorKind::Stochastic => Box::new(PolyLock(XLock::<_, Stochastic>::new(t))),
+            ModeratorKind::ReadBiased => Box::new(PolyLock(ZLock::<_, ReadBiased>::new(t))),
+            ModeratorKind::WriteBiased => Box::new(PolyLock(ZLock::<_, WriteBiased>::new(t))),
+            ModeratorKind::ArrivalOrdered => Box::new(PolyLock(ZLock::<_, ArrivalOrdered>::new(t))),
+            ModeratorKind::Stochastic => Box::new(PolyLock(ZLock::<_, Stochastic>::new(t))),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::xlock::locklike::{LockBoxSized, LockReadGuardlike, LockWriteGuardlike, Locklike, MODERATOR_KINDS};
-    use crate::xlock::{ReadBiased, XLock};
+    use crate::zlock::locklike::{LockBoxSized, LockReadGuardlike, LockWriteGuardlike, Locklike, MODERATOR_KINDS};
+    use crate::zlock::{ReadBiased, ZLock};
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn conformance() {
-        let lock = XLock::<_, ReadBiased>::new(0);
+        let lock = ZLock::<_, ReadBiased>::new(0);
         takes_borrowed(&lock);
 
         takes_owned(lock);
 
-        takes_owned_alt(XLock::<_, ReadBiased>::new(0));
+        takes_owned_alt(ZLock::<_, ReadBiased>::new(0));
 
         for moderator in MODERATOR_KINDS {
             let lock = moderator.make_lock_for_test(0);

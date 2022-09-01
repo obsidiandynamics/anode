@@ -1,5 +1,5 @@
 use std::time::{Duration};
-use crate::xlock::locklike::{LockBoxSized, LockReadGuardlike, LockWriteGuardlike, MODERATOR_KINDS};
+use crate::zlock::locklike::{LockBoxSized, LockReadGuardlike, LockWriteGuardlike, MODERATOR_KINDS};
 
 #[test]
 fn box_cycle() {

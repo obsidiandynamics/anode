@@ -1,29 +1,48 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
+use crate::inf_iterator::{InfIterator};
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::xlock::{Moderator};
+use crate::rand::{Rand64, Seeded, Xorshift, CyclicSeed};
+use crate::zlock::{Moderator};
 
 #[derive(Debug)]
-pub struct WriteBiased;
+pub struct Stochastic;
 
-pub struct WriteBiasedSync {
-    monitor: SpeculativeMonitor<WriteBiasedState>,
+pub struct StochasticSync {
+    monitor: SpeculativeMonitor<StochasticState>,
 }
 
 #[derive(Debug)]
-struct WriteBiasedState {
+struct StochasticState {
     readers: u32,
     writer: bool,
     writer_pending: bool,
+    queued: u32,
+    seed: CyclicSeed,
 }
 
-impl Moderator for WriteBiased {
-    type Sync = WriteBiasedSync;
+impl StochasticState {
+    #[inline]
+    fn enqueue(&mut self) -> u32 {
+        let next = self.queued;
+        self.queued = next + 1;
+        next
+    }
+}
+
+impl Moderator for Stochastic {
+    type Sync = StochasticSync;
 
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            monitor: SpeculativeMonitor::new(WriteBiasedState { readers: 0, writer: false, writer_pending: false }),
+            monitor: SpeculativeMonitor::new(StochasticState {
+                readers: 0,
+                writer: false,
+                writer_pending: false,
+                queued: 0,
+                seed: CyclicSeed::default()
+            }),
         }
     }
 
@@ -32,22 +51,52 @@ impl Moderator for WriteBiased {
         let mut deadline = Deadline::lazy_after(duration);
         let mut acquired = false;
         let mut saw_no_pending_writer = false;
+        let mut privilege_determined = false;
+        let mut position = None;
         sync.monitor.enter(|state| {
-            if !state.writer_pending {
-                saw_no_pending_writer = true;
-            }
+            if !acquired {
+                if !saw_no_pending_writer {
+                    if position.is_none() {
+                        position = Some(state.enqueue());
+                    }
 
-            if !acquired && !state.writer && saw_no_pending_writer {
-                acquired = true;
-                state.readers += 1;
+                    if !state.writer_pending {
+                        saw_no_pending_writer = true;
+                    } else if !privilege_determined {
+                        privilege_determined = true;
+                        let position = position.unwrap();
+                        if position < 64 {
+                            let divisor = position as f64 + 2.0;
+                            let p_privileged = 1.0 / divisor;
+                            let mut rng = Xorshift::seed(state.seed.next());
+                            if rng.gen_bool(p_privileged.into()) {
+                                saw_no_pending_writer = true
+                            }
+                        }
+                    }
+                }
+
+                if !state.writer && saw_no_pending_writer {
+                    acquired = true;
+                    state.readers += 1;
+                }
             }
 
             if acquired {
+                state.queued -= 1;
                 Directive::Return
             } else {
                 Directive::Wait(deadline.remaining())
             }
         });
+
+
+        if !acquired {
+            sync.monitor.alter(|state| {
+                state.queued -= 1;
+            })
+        }
+
         acquired
     }
 
@@ -188,6 +237,3 @@ impl Moderator for WriteBiased {
         acquired
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -1,5 +1,5 @@
 use std::time::Duration;
-use crate::xlock::Moderator;
+use crate::zlock::Moderator;
 
 #[derive(Debug)]
 pub struct Faulty;

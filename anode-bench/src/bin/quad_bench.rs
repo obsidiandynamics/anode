@@ -1,8 +1,8 @@
 use std::sync::{Mutex, RwLock};
-use anode::xlock::{ArrivalOrdered, LegacyReadBiased, LegacyWriteBiased, Stochastic};
-use anode::xlock::ReadBiased;
-use anode::xlock::WriteBiased;
-use anode::xlock::XLock;
+use anode::zlock::{ArrivalOrdered, LegacyReadBiased, LegacyWriteBiased, Stochastic};
+use anode::zlock::ReadBiased;
+use anode::zlock::WriteBiased;
+use anode::zlock::ZLock;
 use anode_bench::quad_harness::{ExtendedOptions, Options};
 use anode_bench::{args, quad_harness};
 use std::time::Duration;
@@ -28,13 +28,13 @@ fn main() {
                         println!("{}", Separator());
                         println!("{}", opts);
                         println!("{}", Header());
-                        run::<XLock::<_, ReadBiased>>("synchrony::rwlock::RwLock<ReadBiased>", &opts);
-                        run::<XLock::<_, LegacyReadBiased>>("synchrony::rwlock::RwLock<LegacyReadBiased>", &opts);
-                        run::<XLock::<_, WriteBiased>>("synchrony::rwlock::RwLock<WriteBiased>", &opts);
-                        run::<XLock::<_, LegacyWriteBiased>>("synchrony::rwlock::RwLock<LegacyWriteBiased>", &opts);
-                        run::<XLock::<_, ArrivalOrdered>>("synchrony::rwlock::RwLock<ArrivalOrdered>", &opts);
-                        run::<XLock::<_, Stochastic>>("synchrony::rwlock::RwLock<Stochastic>", &opts);
-                        run::<SpinLock<_>>("synchrony::spin_mutex::SpinMutex", &opts);
+                        run::<ZLock::<_, ReadBiased>>("anode::rwlock::RwLock<ReadBiased>", &opts);
+                        run::<ZLock::<_, LegacyReadBiased>>("anode::rwlock::RwLock<LegacyReadBiased>", &opts);
+                        run::<ZLock::<_, WriteBiased>>("anode::rwlock::RwLock<WriteBiased>", &opts);
+                        run::<ZLock::<_, LegacyWriteBiased>>("anode::rwlock::RwLock<LegacyWriteBiased>", &opts);
+                        run::<ZLock::<_, ArrivalOrdered>>("anode::rwlock::RwLock<ArrivalOrdered>", &opts);
+                        run::<ZLock::<_, Stochastic>>("anode::rwlock::RwLock<Stochastic>", &opts);
+                        run::<SpinLock<_>>("anode::spin_mutex::SpinMutex", &opts);
                         run::<RwLock<_>>("std::sync::RwLock", &opts);
                         run::<Mutex<_>>("std::sync::Mutex", &opts);
                     }

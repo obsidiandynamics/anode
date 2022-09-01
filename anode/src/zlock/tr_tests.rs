@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Duration};
-use crate::xlock::locklike::{LockReadGuardlike, LockWriteGuardlike, MODERATOR_KINDS};
+use crate::zlock::locklike::{LockReadGuardlike, LockWriteGuardlike, MODERATOR_KINDS};
 
 #[test]
 fn read_release_cycle() {

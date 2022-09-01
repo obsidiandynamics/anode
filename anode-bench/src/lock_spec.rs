@@ -1,6 +1,6 @@
 use anode::spinlock::{SpinGuard, SpinLock};
 use anode::remedy::Remedy;
-use anode::xlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, XLock};
+use anode::zlock::{LockReadGuard, LockWriteGuard, Moderator, UpgradeOutcome, ZLock};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::{MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -58,13 +58,13 @@ impl<'a, T, M: Moderator> ReadGuardSpec<'a, T> for LockReadGuard<'a, T, M> {}
 
 impl<'a, T, M: Moderator> WriteGuardSpec<'a, T> for LockWriteGuard<'a, T, M> {}
 
-impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LockSpec<'a> for XLock<T, M> {
+impl<'a, T: Sync + Send + 'a, M: Moderator + 'a> LockSpec<'a> for ZLock<T, M> {
     type T = T;
     type R = LockReadGuard<'a, T, M>;
     type W = LockWriteGuard<'a, T, M>;
 
     fn new(t: Self::T) -> Self {
-        XLock::<_, M>::new(t)
+        ZLock::<_, M>::new(t)
     }
 
     fn supports_read() -> bool {

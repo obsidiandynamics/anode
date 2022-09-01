@@ -8,12 +8,12 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use crate::xlock::locklike::LockBoxSized;
-use crate::xlock::locklike::LockReadGuardlike;
-use crate::xlock::locklike::LockWriteGuardlike;
-use crate::xlock::locklike::MODERATOR_KINDS;
-use crate::xlock::{ReadBiased, WriteBiased, XLock};
-use crate::xlock::UpgradeOutcome::Upgraded;
+use crate::zlock::locklike::LockBoxSized;
+use crate::zlock::locklike::LockReadGuardlike;
+use crate::zlock::locklike::LockWriteGuardlike;
+use crate::zlock::locklike::MODERATOR_KINDS;
+use crate::zlock::{ReadBiased, WriteBiased, ZLock};
+use crate::zlock::UpgradeOutcome::Upgraded;
 
 #[derive(Eq, PartialEq, Debug)]
 struct NonCopy(i32);
@@ -311,7 +311,7 @@ fn test_rw_arc_access_in_unwind() {
 
 #[test]
 fn test_rwlock_unsized() {
-    let rw: &XLock<[i32], ReadBiased> = &XLock::new([1, 2, 3]);
+    let rw: &ZLock<[i32], ReadBiased> = &ZLock::new([1, 2, 3]);
     {
         let b = &mut *rw.write();
         b[0] = 4;
@@ -460,7 +460,7 @@ fn test_get_mut() {
 fn test_rwlockguard_sync() {
     fn sync<T: Sync>(_: T) {}
 
-    let rwlock = XLock::<_, ReadBiased>::new(());
+    let rwlock = ZLock::<_, ReadBiased>::new(());
     sync(rwlock.read());
     sync(rwlock.write());
 }
@@ -491,9 +491,9 @@ fn test_rwlock_downgrade() {
 
 #[test]
 fn test_rwlock_debug() {
-    let lock = XLock::<_, WriteBiased>::new(5);
+    let lock = ZLock::<_, WriteBiased>::new(5);
     println!("{:?}", lock);
-    assert!(format!("{:?}", lock).contains("XLock"));
+    assert!(format!("{:?}", lock).contains("ZLock"));
     assert!(format!("{:?}", lock).contains("5"));
 
     let guard = lock.write();

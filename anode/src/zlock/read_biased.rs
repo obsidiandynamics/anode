@@ -1,39 +1,28 @@
 use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::xlock::Moderator;
+use crate::zlock::Moderator;
 
 #[derive(Debug)]
-pub struct ArrivalOrdered;
+pub struct ReadBiased;
 
-pub struct ArrivalOrderedSync {
-    monitor: SpeculativeMonitor<ArrivalOrderedState>,
+pub struct ReadBiasedSync {
+    monitor: SpeculativeMonitor<ReadBiasedState>,
 }
 
 #[derive(Debug)]
-struct ArrivalOrderedState {
+struct ReadBiasedState {
     readers: u32,
     writer: bool,
-    next_ticket: u64,
-    serviced_tickets: u64
 }
 
-impl ArrivalOrderedState {
-    #[inline]
-    fn take_ticket(&mut self) -> u64 {
-        let next = self.next_ticket;
-        self.next_ticket = next + 1;
-        next
-    }
-}
-
-impl Moderator for ArrivalOrdered {
-    type Sync = ArrivalOrderedSync;
+impl Moderator for ReadBiased {
+    type Sync = ReadBiasedSync;
 
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            monitor: SpeculativeMonitor::new(ArrivalOrderedState { readers: 0, writer: false, next_ticket: 1, serviced_tickets: 0 }),
+            monitor: SpeculativeMonitor::new(ReadBiasedState { readers: 0, writer: false }),
         }
     }
 
@@ -41,35 +30,18 @@ impl Moderator for ArrivalOrdered {
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut acquired = false;
-        let mut ticket = 0;
         sync.monitor.enter(|state| {
-            if ticket == 0 {
-                ticket = state.take_ticket();
-            }
-            if !acquired && !state.writer && state.serviced_tickets >= ticket - 1 {
+            if !acquired && !state.writer {
                 acquired = true;
                 state.readers += 1;
-                state.serviced_tickets += 1;
             }
 
             if acquired {
-                Directive::NotifyAll
+                Directive::Return
             } else {
                 Directive::Wait(deadline.remaining())
             }
         });
-
-        if !acquired {
-            let mut inc_serviced = false;
-            sync.monitor.enter(|state| {
-                if !inc_serviced {
-                    inc_serviced = true;
-                    state.serviced_tickets += 1;
-                }
-                Directive::NotifyAll
-            })
-        }
-
         acquired
     }
 
@@ -86,7 +58,8 @@ impl Moderator for ArrivalOrdered {
             }
 
             match state.readers {
-                0 | 1 => Directive::NotifyAll,
+                1 => Directive::NotifyAll,
+                0 => Directive::NotifyOne,
                 _ => Directive::Return
             }
         });
@@ -96,35 +69,18 @@ impl Moderator for ArrivalOrdered {
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut acquired = false;
-        let mut ticket = 0;
         sync.monitor.enter(|state| {
-            if ticket == 0 {
-                ticket = state.take_ticket();
-            }
-            if !acquired && state.readers == 0 && !state.writer && state.serviced_tickets >= ticket - 1 {
+            if !acquired && state.readers == 0 && !state.writer {
                 acquired = true;
                 state.writer = true;
-                state.serviced_tickets += 1;
             }
 
             if acquired {
-                Directive::NotifyAll
+                Directive::Return
             } else {
                 Directive::Wait(deadline.remaining())
             }
         });
-
-        if !acquired {
-            let mut inc_serviced = false;
-            sync.monitor.enter(|state| {
-                if !inc_serviced {
-                    inc_serviced = true;
-                    state.serviced_tickets += 1;
-                }
-                Directive::NotifyAll
-            })
-        }
-
         acquired
     }
 
@@ -140,7 +96,7 @@ impl Moderator for ArrivalOrdered {
                 state.writer = false;
             }
 
-            Directive::NotifyAll
+            Directive::NotifyOne
         });
     }
 
@@ -181,6 +137,3 @@ impl Moderator for ArrivalOrdered {
         acquired
     }
 }
-
-#[cfg(test)]
-mod tests;

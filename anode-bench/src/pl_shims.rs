@@ -5,13 +5,13 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use anode::xlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, XLock};
+use anode::zlock::{ArrivalOrdered, ReadBiased, Stochastic, WriteBiased, ZLock};
 use crate::pl_harness::RwLock;
 
-pub struct ReadBiasedLock<T>(XLock<T, ReadBiased>);
-pub struct WriteBiasedLock<T>(XLock<T, WriteBiased>);
-pub struct ArrivalOrderedLock<T>(XLock<T, ArrivalOrdered>);
-pub struct StochasticLock<T>(XLock<T, Stochastic>);
+pub struct ReadBiasedLock<T>(ZLock<T, ReadBiased>);
+pub struct WriteBiasedLock<T>(ZLock<T, WriteBiased>);
+pub struct ArrivalOrderedLock<T>(ZLock<T, ArrivalOrdered>);
+pub struct StochasticLock<T>(ZLock<T, Stochastic>);
 pub struct ParkingLotLock<T>(parking_lot::RwLock<T>);
 pub struct StdLock<T>(std::sync::RwLock<T>);
 
@@ -41,7 +41,7 @@ impl<T> RwLock<T> for StdLock<T> {
 
 impl<T> RwLock<T> for ReadBiasedLock<T> {
     fn new(v: T) -> Self {
-        Self(XLock::new(v))
+        Self(ZLock::new(v))
     }
 
     fn read<F, R>(&self, f: F) -> R
@@ -59,13 +59,13 @@ impl<T> RwLock<T> for ReadBiasedLock<T> {
     }
 
     fn name() -> &'static str {
-        "synchrony::rwlock::RwLock<ReadBiased>"
+        "anode::rwlock::RwLock<ReadBiased>"
     }
 }
 
 impl<T> RwLock<T> for WriteBiasedLock<T> {
     fn new(v: T) -> Self {
-        Self(XLock::new(v))
+        Self(ZLock::new(v))
     }
 
     fn read<F, R>(&self, f: F) -> R
@@ -83,13 +83,13 @@ impl<T> RwLock<T> for WriteBiasedLock<T> {
     }
 
     fn name() -> &'static str {
-        "synchrony::rwlock::RwLock<WriteBiased>"
+        "anode::rwlock::RwLock<WriteBiased>"
     }
 }
 
 impl<T> RwLock<T> for ArrivalOrderedLock<T> {
     fn new(v: T) -> Self {
-        Self(XLock::new(v))
+        Self(ZLock::new(v))
     }
 
     fn read<F, R>(&self, f: F) -> R
@@ -107,13 +107,13 @@ impl<T> RwLock<T> for ArrivalOrderedLock<T> {
     }
 
     fn name() -> &'static str {
-        "synchrony::rwlock::RwLock<ArrivalOrdered>"
+        "anode::rwlock::RwLock<ArrivalOrdered>"
     }
 }
 
 impl<T> RwLock<T> for StochasticLock<T> {
     fn new(v: T) -> Self {
-        Self(XLock::new(v))
+        Self(ZLock::new(v))
     }
 
     fn read<F, R>(&self, f: F) -> R
@@ -131,7 +131,7 @@ impl<T> RwLock<T> for StochasticLock<T> {
     }
 
     fn name() -> &'static str {
-        "synchrony::rwlock::RwLock<Stochastic>"
+        "anode::rwlock::RwLock<Stochastic>"
     }
 }
 

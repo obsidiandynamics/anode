@@ -3,41 +3,30 @@ use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::remedy;
 use crate::remedy::Remedy;
-use crate::xlock::Moderator;
+use crate::zlock::Moderator;
 
 #[derive(Debug)]
-pub struct LegacyArrivalOrdered;
+pub struct LegacyReadBiased;
 
 #[derive(Debug)]
-pub struct LegacyArrivalOrderedSync {
-    state: Mutex<LegacyArrivalOrderedState>,
+pub struct LegacyReadBiasedSync {
+    state: Mutex<LegacyReadBiasedState>,
     cond: Condvar
 }
 
 #[derive(Debug)]
-struct LegacyArrivalOrderedState {
+struct LegacyReadBiasedState {
     readers: u32,
     writer: bool,
-    next_ticket: u64,
-    serviced_tickets: u64
 }
 
-impl LegacyArrivalOrderedState {
-    #[inline]
-    fn take_ticket(&mut self) -> u64 {
-        let next = self.next_ticket;
-        self.next_ticket = next + 1;
-        next
-    }
-}
-
-impl Moderator for LegacyArrivalOrdered {
-    type Sync = LegacyArrivalOrderedSync;
+impl Moderator for LegacyReadBiased {
+    type Sync = LegacyReadBiasedSync;
 
     #[inline]
     fn new() -> Self::Sync {
         Self::Sync {
-            state: Mutex::new(LegacyArrivalOrderedState { readers: 0, writer: false, next_ticket: 1, serviced_tickets: 0 }),
+            state: Mutex::new(LegacyReadBiasedState { readers: 0, writer: false }),
             cond: Condvar::new()
         }
     }
@@ -46,23 +35,16 @@ impl Moderator for LegacyArrivalOrdered {
     fn try_read(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut state = sync.state.lock().remedy();
-        let ticket = state.take_ticket();
-        while state.writer || state.serviced_tickets < ticket - 1 {
-            let (mut guard, timed_out) =
+        while state.writer {
+            let (guard, timed_out) =
                 remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
             if timed_out {
-                guard.serviced_tickets += 1;
-                drop(guard);
-                sync.cond.notify_all();
                 return false
             }
             state = guard;
         }
-        state.serviced_tickets += 1;
         state.readers += 1;
-        drop(state);
-        sync.cond.notify_all();
         true
     }
 
@@ -74,8 +56,10 @@ impl Moderator for LegacyArrivalOrdered {
         state.readers -= 1;
         let readers = state.readers;
         drop(state);
-        if readers <= 1 {
+        if readers == 1 {
             sync.cond.notify_all();
+        } else if readers == 0 {
+            sync.cond.notify_one()
         }
     }
 
@@ -83,23 +67,16 @@ impl Moderator for LegacyArrivalOrdered {
     fn try_write(sync: &Self::Sync, duration: Duration) -> bool {
         let mut deadline = Deadline::lazy_after(duration);
         let mut state = sync.state.lock().remedy();
-        let ticket = state.take_ticket();
-        while state.readers != 0 || state.writer || state.serviced_tickets < ticket - 1 {
-            let (mut guard, timed_out) =
+        while state.readers != 0 || state.writer {
+            let (guard, timed_out) =
                 remedy::cond_wait_remedy(&sync.cond, state, deadline.remaining());
 
             if timed_out {
-                guard.serviced_tickets += 1;
-                drop(guard);
-                sync.cond.notify_all();
                 return false;
             }
             state = guard;
         }
-        state.serviced_tickets += 1;
         state.writer = true;
-        drop(state);
-        sync.cond.notify_all();
         true
     }
 
@@ -110,7 +87,7 @@ impl Moderator for LegacyArrivalOrdered {
         debug_assert!(state.writer);
         state.writer = false;
         drop(state);
-        sync.cond.notify_all();
+        sync.cond.notify_one();
     }
 
     fn downgrade(sync: &Self::Sync) {

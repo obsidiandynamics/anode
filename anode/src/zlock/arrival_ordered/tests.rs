@@ -6,11 +6,11 @@ use crate::monitor::{Monitor};
 use crate::test_utils::LONG_WAIT;
 use crate::wait;
 use crate::wait::{Wait, WaitResult};
-use crate::xlock::{ArrivalOrdered, XLock};
+use crate::zlock::{ArrivalOrdered, ZLock};
 
 #[test]
 fn readers_do_not_block_without_writer() {
-    let lock = XLock::<_, ArrivalOrdered>::new(0);
+    let lock = ZLock::<_, ArrivalOrdered>::new(0);
     let _guard_1 = lock.read();
     let _guard_2 = lock.read();
 
@@ -20,7 +20,7 @@ fn readers_do_not_block_without_writer() {
 
 #[test]
 fn interleaving_writer_blocks_reader() {
-    let lock = Arc::new(XLock::<_, ArrivalOrdered>::new(0));
+    let lock = Arc::new(ZLock::<_, ArrivalOrdered>::new(0));
     let guard_1 = lock.read();
 
     // after acquiring the lock, both the ticket and the service count should increase
@@ -66,7 +66,7 @@ fn interleaving_writer_blocks_reader() {
 
 #[test]
 fn queuing_order() {
-    let lock = Arc::new(XLock::<_, ArrivalOrdered>::new(0));
+    let lock = Arc::new(ZLock::<_, ArrivalOrdered>::new(0));
     let guard_1 = lock.read();
 
     // after acquiring the lock, both the ticket and the service count should increase
@@ -162,7 +162,7 @@ fn queuing_order() {
     assert_eq!(5, lock.serviced_tickets());
 }
 
-impl<T> XLock<T, ArrivalOrdered> {
+impl<T> ZLock<T, ArrivalOrdered> {
     fn next_ticket(&self) -> u64 {
         self.sync.monitor.compute(|state| state.next_ticket)
     }

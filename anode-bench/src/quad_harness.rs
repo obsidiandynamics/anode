@@ -1,5 +1,5 @@
 use crate::lock_spec::{LockSpec, ReadGuardSpec, WriteGuardSpec};
-use anode::xlock::UpgradeOutcome;
+use anode::zlock::UpgradeOutcome;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 use std::{hint, thread};
