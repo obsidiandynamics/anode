@@ -191,7 +191,7 @@ impl<S: ?Sized> Monitor<S> for SpeculativeMonitor<S> {
 
 impl<T: ?Sized + fmt::Debug> fmt::Debug for SpeculativeMonitor<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut d = f.debug_struct("SpinLock");
+        let mut d = f.debug_struct("SpeculativeMonitor");
         match self.tracker.try_lock() {
             None => {
                 struct LockedPlaceholder;

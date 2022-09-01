@@ -345,6 +345,17 @@ fn wait_notify_chain() {
     t_4.join().unwrap();
 }
 
+#[test]
+fn implements_debug() {
+    let monitor = SpeculativeMonitor::new("foobar");
+    assert!(format!("{:?}", monitor).contains("SpeculativeMonitor"));
+    assert!(format!("{:?}", monitor).contains("foobar"));
+
+    let guard = monitor.lock();
+    assert!(format!("{:?}", monitor).contains("<locked>"));
+    drop(guard);
+}
+
 impl<T> SpeculativeMonitor<T> {
     fn wait_for_num_waiting(&self, cmp: impl FnMut(Ordering) -> bool, target: u32, duration: Duration) -> WaitResult {
         wait::Spin::wait_for_inequality(|| self.num_waiting(), cmp, &target, duration)
