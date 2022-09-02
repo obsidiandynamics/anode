@@ -1,26 +1,19 @@
+use std::time::Duration;
 use anode::completable::Completable;
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use iai::main;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("complete", |b| {
+    c.bench_function("incomplete/complete", |b| {
         b.iter(|| {
             let completable = Completable::default();
             let completed = completable.complete(());
             debug_assert!(completed.is_none());
             completed
         });
-
-        // b.iter_batched(
-        //     || Completable::new(()),
-        //     |completable| {
-        //         let completed = completable.complete(());
-        //         completed
-        //     },
-        //     BatchSize::SmallInput,
-        // );
     });
 
-    c.bench_function("is_complete", |b| {
+    c.bench_function("incomplete/is_complete", |b| {
         b.iter(|| {
             let completable = Completable::<()>::default();
             let completed = completable.is_complete();
@@ -29,7 +22,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("already_complete", |b| {
+    c.bench_function("completed/complete", |b| {
         b.iter(|| {
             let completable = Completable::new(());
             let completed = completable.complete(());
@@ -38,11 +31,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("completed_get", |b| {
+    c.bench_function("completed/get", |b| {
         b.iter(|| {
             let completable = Completable::new(());
             let completed = completable.get();
             black_box(completed);
+        });
+    });
+
+    c.bench_function("incomplete/try_get", |b| {
+        b.iter(|| {
+            let completable = Completable::<()>::default();
+            let maybe_completed = completable.try_get(Duration::ZERO);
+            debug_assert!(maybe_completed.is_none());
+            black_box(maybe_completed);
         });
     });
 }

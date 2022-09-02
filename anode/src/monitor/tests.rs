@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 use std::sync::{Arc, Barrier};
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
-use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
+use crate::monitor::Monitor;
+use crate::monitor::Directive;
+use crate::monitor::SpeculativeMonitor;
 use crate::{test_utils, wait};
 use crate::test_utils::{LONG_WAIT, SHORT_WAIT};
 use crate::wait::{Wait, WaitResult};
@@ -19,6 +21,10 @@ fn return_immediately() {
     });
     assert_eq!(1, invocations);
 
+    let guard = monitor.lock();
+    assert_eq!(42, *guard);
+    drop(guard);
+
     let mut invocations = 0;
     monitor.enter(|val| {
         assert_eq!(42, *val);
@@ -27,18 +33,24 @@ fn return_immediately() {
     });
     assert_eq!(1, invocations);
     assert_eq!(0, monitor.num_waiting());
+
+    let guard = monitor.lock();
+    assert_eq!(42, *guard);
+    drop(guard);
 }
 
 #[test]
 fn wait_for_nothing() {
     let monitor = SpeculativeMonitor::new(());
     let mut invocations = 0;
-    monitor.enter(|_| {
+    let guard = monitor.enter(|_| {
         invocations += 1;
         Directive::Wait(Duration::ZERO)
     });
+    assert_eq!((), *guard);
+    drop(guard);
     // Duration::ZERO does not actually wait, so spurious wake-ups are impossible
-    assert_eq!(2, invocations);
+    assert_eq!(1, invocations);
     monitor.wait_for_num_waiting(Ordering::is_eq, 0, LONG_WAIT).unwrap();
 
     let mut invocations = 0;
@@ -55,10 +67,12 @@ fn wait_for_nothing() {
 fn notify_nothing() {
     let monitor = SpeculativeMonitor::new(());
     let mut invocations = 0;
-    monitor.enter(|_| {
+    let guard = monitor.enter(|_| {
         invocations += 1;
         Directive::NotifyOne
     });
+    assert_eq!((), *guard);
+    drop(guard);
     assert_eq!(1, invocations);
 
     let mut invocations = 0;
@@ -79,7 +93,7 @@ fn wait_for_notify() {
             let monitor = monitor.clone();
             let t_2_waited = t_2_waited.clone();
             test_utils::spawn_blocked(move || {
-                monitor.enter(|flag| {
+                let guard = monitor.enter(|flag| {
                     match flag {
                         true => {
                             *flag = false;
@@ -88,7 +102,8 @@ fn wait_for_notify() {
                         },
                         false => Directive::Wait(Duration::MAX)
                     }
-                })
+                });
+                assert!(!*guard);
             })
         };
 
@@ -98,20 +113,24 @@ fn wait_for_notify() {
         monitor.wait_for_num_waiting(Ordering::is_eq, 1, LONG_WAIT).unwrap();
 
         // raise the flag and notify one thread (there should only be one waiting)
-        monitor.enter(|flag| {
+        let guard = monitor.enter(|flag| {
             *flag = true;
             Directive::NotifyOne
         });
+        assert!(*guard);
+        drop(guard);
 
         // wait for t_2 to wake from the notification
         t_2_waited.wait();
         monitor.wait_for_num_waiting(Ordering::is_eq, 0, LONG_WAIT).unwrap();
 
         // the flag should have been lowered by the woken thread
-        monitor.enter(|flag| {
+        let guard = monitor.enter(|flag| {
             assert!(!*flag);
             Directive::Return
         });
+        assert!(!*guard);
+        drop(guard);
 
         t_2.join().unwrap();
     }
@@ -136,7 +155,7 @@ fn wait_for_notify_twice() {
                         },
                         false => Directive::Wait(Duration::MAX)
                     }
-                })
+                });
             })
         };
 
@@ -154,7 +173,7 @@ fn wait_for_notify_twice() {
                         },
                         false => Directive::Wait(Duration::MAX)
                     }
-                })
+                });
             })
         };
 
@@ -226,7 +245,7 @@ fn wait_for_notify_all() {
                         },
                         false => Directive::Wait(Duration::MAX)
                     }
-                })
+                });
             })
         };
 
@@ -243,7 +262,7 @@ fn wait_for_notify_all() {
                         },
                         false => Directive::Wait(Duration::MAX)
                     }
-                })
+                });
             })
         };
 
@@ -285,7 +304,7 @@ fn wait_notify_chain() {
                     },
                     _ => Directive::Wait(Duration::MAX)
                 }
-            })
+            });
         })
     };
 
@@ -303,7 +322,7 @@ fn wait_notify_chain() {
                     },
                     _ => Directive::Wait(Duration::MAX)
                 }
-            })
+            });
         })
     };
 
@@ -321,7 +340,7 @@ fn wait_notify_chain() {
                     },
                     _ => Directive::Wait(Duration::MAX)
                 }
-            })
+            });
         })
     };
 
@@ -348,11 +367,11 @@ fn wait_notify_chain() {
 #[test]
 fn implements_debug() {
     let monitor = SpeculativeMonitor::new("foobar");
-    assert!(format!("{:?}", monitor).contains("SpeculativeMonitor"));
-    assert!(format!("{:?}", monitor).contains("foobar"));
+    assert!(format!("{:?}", monitor).contains("SpeculativeMonitor"), "{:?}", monitor);
+    assert!(format!("{:?}", monitor).contains("foobar"), "{:?}", monitor);
 
     let guard = monitor.lock();
-    assert!(format!("{:?}", monitor).contains("<locked>"));
+    assert!(format!("{:?}", monitor).contains("<locked>"), "{:?}", monitor);
     drop(guard);
 }
 

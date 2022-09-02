@@ -67,7 +67,7 @@ impl Moderator for ArrivalOrdered {
                     state.serviced_tickets += 1;
                 }
                 Directive::NotifyAll
-            })
+            });
         }
 
         acquired
@@ -122,7 +122,7 @@ impl Moderator for ArrivalOrdered {
                     state.serviced_tickets += 1;
                 }
                 Directive::NotifyAll
-            })
+            });
         }
 
         acquired

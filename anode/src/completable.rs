@@ -112,7 +112,7 @@ impl<T> Completable<T> {
 
     #[inline]
     pub fn is_complete(&self) -> bool {
-        self.monitor.compute(Option::is_some)
+        self.monitor.lock().is_some()
     }
 
     #[inline]
@@ -144,8 +144,7 @@ impl<T> Completable<T> {
             } else {
                 Directive::Return
             }
-        });
-        self.monitor.lock()
+        })
     }
 
     pub fn into_inner(self) -> Option<T> {

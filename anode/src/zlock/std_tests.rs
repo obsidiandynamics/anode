@@ -492,10 +492,10 @@ fn test_rwlock_downgrade() {
 #[test]
 fn test_rwlock_debug() {
     let lock = ZLock::<_, WriteBiased>::new("foobar");
-    assert!(format!("{:?}", lock).contains("ZLock"));
-    assert!(format!("{:?}", lock).contains("foobar"));
+    assert!(format!("{:?}", lock).contains("ZLock"), "{:?}", lock);
+    assert!(format!("{:?}", lock).contains("foobar"), "{:?}", lock);
 
     let guard = lock.write();
-    assert!(format!("{:?}", lock).contains("<locked>"));
+    assert!(format!("{:?}", lock).contains("<locked>"), "{:?}", lock);
     drop(guard);
 }

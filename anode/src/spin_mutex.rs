@@ -67,7 +67,6 @@ impl<T: ?Sized> SpinMutex<T> {
             match self.try_lock() {
                 None => {
                     let mut rng = LazyRand64::<Xorshift, _>::lazy(clock_seed);
-                    // let mut rng = FIXED_DURATION;
                     let mut backoff = ExpBackoff::sleepy().into_inf_iter();
                     while self.locked.load(Ordering::Relaxed) {
                         hint::spin_loop();
