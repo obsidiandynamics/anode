@@ -137,14 +137,16 @@ impl<T> Completable<T> {
     /// value is publicly exposed as a [`Deref`] trait.
     #[inline]
     fn __try_get(&self, duration: Duration) -> SpeculativeMonitorGuard<Option<T>> {
-        let mut deadline = Deadline::lazy_after(duration);
-        self.monitor.enter(|state| {
-            if state.is_none() {
-                Directive::Wait(deadline.remaining())
-            } else {
-                Directive::Return
-            }
-        });
+        if !duration.is_zero() {
+            let mut deadline = Deadline::lazy_after(duration);
+            self.monitor.enter(|state| {
+                if state.is_none() {
+                    Directive::Wait(deadline.remaining())
+                } else {
+                    Directive::Return
+                }
+            });
+        }
         self.monitor.lock()
     }
 
