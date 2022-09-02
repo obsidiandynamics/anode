@@ -21,6 +21,10 @@ name = "cri_completable"
 harness = false
 
 [[bench]]
+name = "cri_monitor"
+harness = false
+
+[[bench]]
 name = "cri_rand"
 harness = false
 
