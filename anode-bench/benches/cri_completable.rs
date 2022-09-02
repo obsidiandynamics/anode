@@ -1,6 +1,6 @@
-use std::time::Duration;
 use anode::completable::Completable;
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::time::Duration;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("incomplete/complete", |b| {

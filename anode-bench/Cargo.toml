@@ -19,6 +19,14 @@ name = "cri_completable"
 harness = false
 
 [[bench]]
+name = "cri_zlock"
+harness = false
+
+[[bench]]
+name = "iai_zlock"
+harness = false
+
+[[bench]]
 name = "iai_completable"
 harness = false
 

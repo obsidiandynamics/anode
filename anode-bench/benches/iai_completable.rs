@@ -1,6 +1,6 @@
-use std::time::Duration;
-use anode::completable::{Completable};
+use anode::completable::Completable;
 use iai::{black_box, main};
+use std::time::Duration;
 
 fn incomplete_complete() -> Option<()> {
     let completable = Completable::default();
@@ -36,4 +36,10 @@ fn complete_get() {
     black_box(completed);
 }
 
-main!(incomplete_complete, incomplete_is_complete, incomplete_try_get, complete_complete, complete_get);
+main!(
+    incomplete_complete,
+    incomplete_is_complete,
+    incomplete_try_get,
+    complete_complete,
+    complete_get
+);

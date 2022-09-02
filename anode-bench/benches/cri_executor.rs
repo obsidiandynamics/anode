@@ -1,18 +1,21 @@
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
 use anode::completable::Outcome;
 use anode::executor::{Executor, Queue, Submitter, ThreadPool};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn criterion_benchmark(c: &mut Criterion) {
     for threads in [1, 2, 4] {
         for queue_size in [100, 1_000, 10_000] {
             let pool = ThreadPool::new(threads, Queue::Bounded(queue_size));
             let submitter = pool.submitter();
-            c.bench_function(&format!("submit_and_forget(threads={threads}, queue_size={queue_size})"), |b| {
-                b.iter(|| {
-                    let completable = submitter.submit(|| ());
-                    black_box(completable);
-                });
-            });
+            c.bench_function(
+                &format!("submit_and_forget(threads={threads}, queue_size={queue_size})"),
+                |b| {
+                    b.iter(|| {
+                        let completable = submitter.submit(|| ());
+                        black_box(completable);
+                    });
+                },
+            );
         }
     }
 
