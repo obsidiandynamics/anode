@@ -159,6 +159,7 @@ impl Default for Xorshift {
 }
 
 impl Rand64 for Xorshift {
+    #[inline(always)]
     fn next_u64(&mut self) -> u64 {
         let mut s = self.seed;
         s ^= s << 13;
