@@ -24,8 +24,6 @@ pub trait Rand64 {
             // guarantees that gen_bool(p=1.0) is never true
             next = u64::MAX - 1;
         }
-        #[cfg(test)]
-        dbg!((cutoff, next));
         next < cutoff
     }
 }

@@ -12,7 +12,7 @@ use crate::zlock::locklike::LockBoxSized;
 use crate::zlock::locklike::LockReadGuardlike;
 use crate::zlock::locklike::LockWriteGuardlike;
 use crate::zlock::locklike::MODERATOR_KINDS;
-use crate::zlock::{ReadBiased, WriteBiased, ZLock};
+use crate::zlock::{ArrivalOrdered, Moderator, ReadBiased, Stochastic, WriteBiased, ZLock};
 use crate::zlock::UpgradeOutcome::Upgraded;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -29,65 +29,79 @@ fn smoke() {
     }
 }
 
+#[test]
+fn frob_read_biased() {
+    __frob(ZLock::<_, ReadBiased>::new(()), 10, 1000);
+}
+
+#[test]
+fn frob_write_biased() {
+    __frob(ZLock::<_, WriteBiased>::new(()), 10, 1000);
+}
+
+#[test]
+fn frob_write_arrival_ordered() {
+    __frob(ZLock::<_, ArrivalOrdered>::new(()), 10, 100);
+}
+
+#[test]
+fn frob_stochastic() {
+    __frob(ZLock::<_, Stochastic>::new(()), 10, 1000);
+}
+
 /// Enhanced over the original test to exercise both the read/write and the try_read/try_write paths,
 /// as well as downgrade and try_upgrade.
-#[test]
-fn frob() {
-    for moderator in MODERATOR_KINDS {
-        const N: u32 = 10;
-        const M: u32 = 1000;
+fn __frob<M: Moderator + 'static>(lock: ZLock<(), M>, threads: usize, runs: usize) {
+    let r = Arc::new(lock);
 
-        let r = Arc::new(moderator.make_lock_for_test(()));
+    let (tx, rx) = channel::<()>();
+    for _ in 0..threads {
+        let tx = tx.clone();
+        let r = r.clone();
+        thread::spawn(move || {
+            let mut rng = rand::thread_rng();
+            for _ in 0..runs {
+                if rng.gen_bool(1.0 / threads as f64) {
+                    // println!("{t} trying write");
+                    drop(r.write());
+                } else {
+                    // println!("trying read");
+                    drop(r.read());
+                }
 
-        let (tx, rx) = channel::<()>();
-        for _ in 0..N {
-            let tx = tx.clone();
-            let r = r.clone();
-            thread::spawn(move || {
-                let mut rng = rand::thread_rng();
-                for _ in 0..M {
-                    if rng.gen_bool(1.0 / N as f64) {
-                        // println!("{t} trying write");
-                        drop(r.write());
+                if rng.gen_bool(1.0 / threads as f64) {
+                    // println!("{t} trying write");
+                    drop(r.try_write(SHORT_WAIT));
+                } else {
+                    // println!("trying read");
+                    drop(r.try_read(SHORT_WAIT));
+                }
+
+                if rng.gen_bool(1.0 / threads as f64) {
+                    // println!("{t} trying write");
+                    drop(r.try_write(Duration::ZERO));
+                } else {
+                    // println!("trying read");
+                    drop(r.try_read(Duration::ZERO));
+                }
+
+                if rng.gen_bool(1.0 / threads as f64) {
+                    // println!("{t} trying write");
+                    drop(r.write().downgrade());
+                } else {
+                    // println!("trying read");
+                    if rng.gen_bool(0.5) {
+                        drop(r.read().try_upgrade(SHORT_WAIT));
                     } else {
-                        // println!("trying read");
-                        drop(r.read());
-                    }
-
-                    if rng.gen_bool(1.0 / N as f64) {
-                        // println!("{t} trying write");
-                        drop(r.try_write(SHORT_WAIT));
-                    } else {
-                        // println!("trying read");
-                        drop(r.try_read(SHORT_WAIT));
-                    }
-
-                    if rng.gen_bool(1.0 / N as f64) {
-                        // println!("{t} trying write");
-                        drop(r.try_write(Duration::ZERO));
-                    } else {
-                        // println!("trying read");
-                        drop(r.try_read(Duration::ZERO));
-                    }
-
-                    if rng.gen_bool(1.0 / N as f64) {
-                        // println!("{t} trying write");
-                        drop(r.write().downgrade());
-                    } else {
-                        // println!("trying read");
-                        if rng.gen_bool(0.5) {
-                            drop(r.read().try_upgrade(SHORT_WAIT));
-                        } else {
-                            drop(r.read().try_upgrade(Duration::ZERO));
-                        }
+                        drop(r.read().try_upgrade(Duration::ZERO));
                     }
                 }
-                drop(tx);
-            });
-        }
-        drop(tx);
-        let _ = rx.recv();
+            }
+            drop(tx);
+        });
     }
+    drop(tx);
+    let _ = rx.recv();
 }
 
 #[test]

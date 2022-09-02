@@ -21,29 +21,29 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("completed/complete", |b| {
-        b.iter(|| {
-            let completable = Completable::new(());
-            let completed = completable.complete(());
-            debug_assert!(completed.is_some());
-            completed
-        });
-    });
-
-    c.bench_function("completed/get", |b| {
-        b.iter(|| {
-            let completable = Completable::new(());
-            let completed = completable.get();
-            black_box(completed);
-        });
-    });
-
     c.bench_function("incomplete/try_get", |b| {
         b.iter(|| {
             let completable = Completable::<()>::default();
             let maybe_completed = completable.try_get(Duration::ZERO);
             debug_assert!(maybe_completed.is_none());
             black_box(maybe_completed);
+        });
+    });
+
+    let completable = Completable::new(());
+    c.bench_function("completed/complete", |b| {
+        b.iter(|| {
+            let completed = completable.complete(());
+            debug_assert!(completed.is_some());
+            completed
+        });
+    });
+
+    let completable = Completable::new(());
+    c.bench_function("completed/get", |b| {
+        b.iter(|| {
+            let completed = completable.get();
+            black_box(completed);
         });
     });
 }
