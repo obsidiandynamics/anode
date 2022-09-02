@@ -9,26 +9,6 @@ fn incomplete_complete() -> Option<()> {
     completed
 }
 
-fn incomplete_is_complete() -> bool {
-    let completable = Completable::<()>::default();
-    let completed = completable.is_complete();
-    debug_assert!(!completed);
-    completed
-}
-
-fn completed_complete() -> Option<()> {
-    let completable = Completable::new(());
-    let completed = completable.complete(());
-    debug_assert!(completed.is_some());
-    completed
-}
-
-fn completed_get() {
-    let completable = Completable::new(());
-    let completed = completable.get();
-    black_box(completed);
-}
-
 fn incomplete_try_get() {
     let completable = Completable::<()>::default();
     let maybe_completed = completable.try_get(Duration::ZERO);
@@ -36,4 +16,24 @@ fn incomplete_try_get() {
     black_box(maybe_completed);
 }
 
-main!(incomplete_complete, incomplete_is_complete, completed_complete, completed_get, incomplete_try_get);
+fn incomplete_is_complete() -> bool {
+    let completable = Completable::<()>::default();
+    let completed = completable.is_complete();
+    debug_assert!(!completed);
+    completed
+}
+
+fn complete_complete() -> Option<()> {
+    let completable = Completable::new(());
+    let completed = completable.complete(());
+    debug_assert!(completed.is_some());
+    completed
+}
+
+fn complete_get() {
+    let completable = Completable::new(());
+    let completed = completable.get();
+    black_box(completed);
+}
+
+main!(incomplete_complete, incomplete_is_complete, incomplete_try_get, complete_complete, complete_get);

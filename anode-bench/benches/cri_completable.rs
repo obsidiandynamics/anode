@@ -30,19 +30,18 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     });
 
-    let completable = Completable::new(());
-    c.bench_function("completed/complete", |b| {
+    let complete = Completable::new(());
+    c.bench_function("complete/complete", |b| {
         b.iter(|| {
-            let completed = completable.complete(());
+            let completed = complete.complete(());
             debug_assert!(completed.is_some());
             completed
         });
     });
 
-    let completable = Completable::new(());
-    c.bench_function("completed/get", |b| {
+    c.bench_function("complete/get", |b| {
         b.iter(|| {
-            let completed = completable.get();
+            let completed = complete.get();
             black_box(completed);
         });
     });

@@ -21,3 +21,7 @@ harness = false
 [[bench]]
 name = "iai_completable"
 harness = false
+
+[[bench]]
+name = "cri_executor"
+harness = false
