@@ -43,12 +43,10 @@ fn return_immediately() {
 fn wait_for_nothing() {
     let monitor = SpeculativeMonitor::new(());
     let mut invocations = 0;
-    let guard = monitor.enter(|_| {
+    monitor.enter(|_| {
         invocations += 1;
         Directive::Wait(Duration::ZERO)
     });
-    assert_eq!((), *guard);
-    drop(guard);
     // Duration::ZERO does not actually wait, so spurious wake-ups are impossible
     assert_eq!(1, invocations);
     monitor.wait_for_num_waiting(Ordering::is_eq, 0, LONG_WAIT).unwrap();
@@ -67,12 +65,10 @@ fn wait_for_nothing() {
 fn notify_nothing() {
     let monitor = SpeculativeMonitor::new(());
     let mut invocations = 0;
-    let guard = monitor.enter(|_| {
+    monitor.enter(|_| {
         invocations += 1;
         Directive::NotifyOne
     });
-    assert_eq!((), *guard);
-    drop(guard);
     assert_eq!(1, invocations);
 
     let mut invocations = 0;
@@ -93,7 +89,7 @@ fn wait_for_notify() {
             let monitor = monitor.clone();
             let t_2_waited = t_2_waited.clone();
             test_utils::spawn_blocked(move || {
-                let guard = monitor.enter(|flag| {
+                monitor.enter(|flag| {
                     match flag {
                         true => {
                             *flag = false;
@@ -103,7 +99,6 @@ fn wait_for_notify() {
                         false => Directive::Wait(Duration::MAX)
                     }
                 });
-                assert!(!*guard);
             })
         };
 
@@ -117,7 +112,6 @@ fn wait_for_notify() {
             *flag = true;
             Directive::NotifyOne
         });
-        assert!(*guard);
         drop(guard);
 
         // wait for t_2 to wake from the notification
@@ -129,7 +123,6 @@ fn wait_for_notify() {
             assert!(!*flag);
             Directive::Return
         });
-        assert!(!*guard);
         drop(guard);
 
         t_2.join().unwrap();

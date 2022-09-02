@@ -11,7 +11,7 @@ pub trait MonitorGuard<'a, S: ?Sized>: DerefMut<Target = S> {}
 pub trait Monitor<'a, S: ?Sized> {
     type Guard: MonitorGuard<'a, S>;
 
-    fn enter<F: FnMut(&mut S) -> Directive>(&'a self, f: F) -> Self::Guard;
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, f: F);
 
     fn lock(&'a self) -> Self::Guard;
 
@@ -114,7 +114,7 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
     type Guard = SpeculativeMonitorGuard<'a, S>;
 
     #[inline(always)]
-    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) -> SpeculativeMonitorGuard<S> {
+    fn enter<F: FnMut(&mut S) -> Directive>(&self, mut f: F) {
         let mut mutex_guard = None;
         let mut woken = false;
         loop {
@@ -127,11 +127,11 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
             let directive = f(data);
             match directive {
                 Directive::Return => {
-                    return SpeculativeMonitorGuard { spin_guard };
+                    return
                 }
                 Directive::Wait(duration) => {
                     if duration.is_zero() {
-                        return SpeculativeMonitorGuard { spin_guard };
+                        return
                     } else {
                         match mutex_guard.take() {
                             None => {
@@ -150,7 +150,7 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                                     // println!("timed out");
                                     let mut spin_guard = self.tracker.lock();
                                     spin_guard.waiting -= 1;
-                                    return SpeculativeMonitorGuard { spin_guard };
+                                    return
                                 } else {
                                     // println!("keep going");
                                     mutex_guard = Some(guard);
@@ -162,10 +162,10 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                 }
                 Directive::NotifyOne | Directive::NotifyAll => {
                     if spin_guard.waiting > 0 {
+                        drop(spin_guard);
                         match mutex_guard.take() {
                             None => {
                                 // println!("init lock");
-                                drop(spin_guard);
                                 mutex_guard = Some(self.mutex.lock().remedy());
                             }
                             Some(guard) => {
@@ -179,11 +179,11 @@ impl<'a, S: 'a> Monitor<'a, S> for SpeculativeMonitor<S> {
                                     }
                                     _ => unreachable!()
                                 }
-                                return SpeculativeMonitorGuard { spin_guard };
+                                return
                             }
                         }
                     } else {
-                        return SpeculativeMonitorGuard { spin_guard };
+                        return
                     }
                 }
             }

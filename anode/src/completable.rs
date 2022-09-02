@@ -144,7 +144,8 @@ impl<T> Completable<T> {
             } else {
                 Directive::Return
             }
-        })
+        });
+        self.monitor.lock()
     }
 
     pub fn into_inner(self) -> Option<T> {
