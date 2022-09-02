@@ -1,5 +1,6 @@
 pub mod args;
 pub mod exec_harness;
+pub mod lock_shims;
 pub mod lock_spec;
 pub mod pl_harness;
 pub mod pl_shims;

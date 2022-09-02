@@ -1,5 +1,5 @@
 use std::time::Duration;
-use anode::completable::{Completable, Completed};
+use anode::completable::{Completable};
 use iai::{black_box, main};
 
 fn incomplete_complete() -> Option<()> {
