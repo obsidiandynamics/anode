@@ -17,3 +17,7 @@ iai = "0.1.1"
 [[bench]]
 name = "cri_completable"
 harness = false
+
+[[bench]]
+name = "iai_completable"
+harness = false

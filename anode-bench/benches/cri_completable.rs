@@ -1,7 +1,6 @@
 use std::time::Duration;
 use anode::completable::Completable;
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
-use iai::main;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("incomplete/complete", |b| {
