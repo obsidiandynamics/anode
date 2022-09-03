@@ -14,4 +14,8 @@ fn main() {
     }
     let rate = was_true as f64 / tries as f64;
     println!("rate of true {}", rate);
+
+    let n = 13u64;
+    let m = (u64::MAX - n) % n;
+    dbg!((n, m));
 }
