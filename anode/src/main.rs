@@ -7,7 +7,7 @@ fn main() {
     let mut rng = Xorshift::seed(clock_seed());
     let mut was_true = 0;
     for _ in 0..tries {
-        let b = rng.gen_bool(p);
+        let b = rng.next_bool(p);
         if b {
             was_true += 1;
         }

@@ -2,7 +2,7 @@ use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::inf_iterator::{InfIterator};
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::rand::{Rand64, Seeded, Xorshift, CyclicSeed};
+use crate::rand::{Rand64, Seeded, Xorshift, CyclicSeed, Probability};
 use crate::zlock::{Moderator};
 
 #[derive(Debug)]
@@ -69,7 +69,8 @@ impl Moderator for Stochastic {
                             let divisor = position as f64 + 2.0;
                             let p_privileged = 1.0 / divisor;
                             let mut rng = Xorshift::seed(state.seed.next());
-                            if rng.gen_bool(p_privileged.into()) {
+                            let probability = unsafe { Probability::new_unchecked(p_privileged) };
+                            if rng.next_bool(probability) {
                                 saw_no_pending_writer = true
                             }
                         }

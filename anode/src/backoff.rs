@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::{thread};
 use std::ops::Range;
 use crate::inf_iterator::{InfIterator, IntoInfIterator};
-use crate::rand::{RandDuration};
+use crate::rand::RandRange;
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub struct NonzeroDuration(Duration);
@@ -106,7 +106,7 @@ pub enum ExpBackoffAction {
 
 impl ExpBackoffAction {
     #[inline(always)]
-    pub fn act<'a, R, D>(&self, randomness: D) where R: RandDuration + 'a, D: FnOnce() -> &'a mut R  {
+    pub fn act<'a, R, D>(&self, randomness: D) where R: RandRange<Duration> + 'a, D: FnOnce() -> &'a mut R  {
         match self {
             ExpBackoffAction::Nop => (),
             ExpBackoffAction::Yield => thread::yield_now(),
@@ -116,7 +116,7 @@ impl ExpBackoffAction {
                     end: *duration,
                 };
                 let rng = randomness();
-                thread::sleep(rng.gen_range(range));
+                thread::sleep(rng.next_range(range));
             }
         }
     }

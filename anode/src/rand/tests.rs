@@ -23,19 +23,19 @@ fn duration_from_nanos_reversible() {
 fn fixed_duration() {
     assert_eq!(
         Duration::ZERO,
-        FixedDuration::default().gen_range(Duration::ZERO..Duration::ZERO)
+        FixedDuration::default().next_range(Duration::ZERO..Duration::ZERO)
     );
     assert_eq!(
         Duration::ZERO,
-        FixedDuration::default().gen_range(Duration::ZERO..Duration::from_nanos(1))
+        FixedDuration::default().next_range(Duration::ZERO..Duration::from_nanos(1))
     );
     assert_eq!(
         Duration::from_nanos(1),
-        FixedDuration::default().gen_range(Duration::ZERO..Duration::from_nanos(2))
+        FixedDuration::default().next_range(Duration::ZERO..Duration::from_nanos(2))
     );
     assert_eq!(
         Duration::MAX - Duration::from_nanos(1),
-        FixedDuration::default().gen_range(Duration::ZERO..Duration::MAX)
+        FixedDuration::default().next_range(Duration::ZERO..Duration::MAX)
     );
 }
 
@@ -146,14 +146,14 @@ fn random_duration() {
             exp_max: Duration::from_secs(101)
         }
     ] {
-        let d = rng.gen_range(case.range.clone());
+        let d = rng.next_range(case.range.clone());
         assert!(
             d >= case.exp_min,
-            "for case {case:?} random duration was {d:?}"
+            "for {case:?} random duration was {d:?}"
         );
         assert!(
             d <= case.exp_max,
-            "for case {case:?} random duration was {d:?}"
+            "for {case:?} random duration was {d:?}"
         );
     }
 }
@@ -210,34 +210,34 @@ impl Rand64 for MockRng {
 }
 
 #[test]
-fn gen_bool() {
+fn next_bool() {
     // NB: no matter what the random number, p(0.0) should always evaluate to false,
     // while p(1.0) should always evaluate to true
 
     let mut rng = MockRng::default();
     rng.next = 0;
-    assert!(!rng.gen_bool(0.0.into()));
-    assert!(rng.gen_bool(f64::EPSILON.into()));
-    assert!(rng.gen_bool(0.5.into()));
-    assert!(rng.gen_bool(1.0.into()));
+    assert!(!rng.next_bool(0.0.into()));
+    assert!(rng.next_bool(f64::EPSILON.into()));
+    assert!(rng.next_bool(0.5.into()));
+    assert!(rng.next_bool(1.0.into()));
 
     rng.next = u64::MAX / 4;
-    assert!(!rng.gen_bool(0.0.into()));
-    assert!(!rng.gen_bool((0.25 - f64::EPSILON).into()));
-    assert!(rng.gen_bool((0.25 + f64::EPSILON).into()));
-    assert!(rng.gen_bool(1.0.into()));
+    assert!(!rng.next_bool(0.0.into()));
+    assert!(!rng.next_bool((0.25 - f64::EPSILON).into()));
+    assert!(rng.next_bool((0.25 + f64::EPSILON).into()));
+    assert!(rng.next_bool(1.0.into()));
 
     rng.next = u64::MAX / 2;
-    assert!(!rng.gen_bool(0.0.into()));
-    assert!(!rng.gen_bool((0.5 - f64::EPSILON).into()));
-    assert!(rng.gen_bool((0.5 + f64::EPSILON).into()));
-    assert!(rng.gen_bool(1.0.into()));
+    assert!(!rng.next_bool(0.0.into()));
+    assert!(!rng.next_bool((0.5 - f64::EPSILON).into()));
+    assert!(rng.next_bool((0.5 + f64::EPSILON).into()));
+    assert!(rng.next_bool(1.0.into()));
 
     rng.next = u64::MAX;
-    assert!(!rng.gen_bool(0.0.into()));
-    assert!(!rng.gen_bool(0.5.into()));
-    assert!(!rng.gen_bool((1.0 - f64::EPSILON).into()));
-    assert!(rng.gen_bool(1.0.into()));
+    assert!(!rng.next_bool(0.0.into()));
+    assert!(!rng.next_bool(0.5.into()));
+    assert!(!rng.next_bool((1.0 - f64::EPSILON).into()));
+    assert!(rng.next_bool(1.0.into()));
 }
 
 #[test]
@@ -250,4 +250,18 @@ fn probability_panics_lt_0() {
 #[should_panic(expected="cannot be greater than 1")]
 fn probability_panics_gt_1() {
     Probability::new(1f64 + f64::EPSILON);
+}
+
+#[test]
+fn test_cutoff_u64() {
+    assert_eq!(u64::MAX, cutoff_u64(1));
+    assert_eq!(u64::MAX, cutoff_u64(2));
+    assert_eq!(u64::MAX - 1, cutoff_u64(3));
+}
+
+#[test]
+fn test_cutoff_u128() {
+    assert_eq!(u128::MAX, cutoff_u128(1));
+    assert_eq!(u128::MAX, cutoff_u128(2));
+    assert_eq!(u128::MAX - 1, cutoff_u128(3));
 }

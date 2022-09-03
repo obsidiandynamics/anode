@@ -1,12 +1,17 @@
 use crate::inf_iterator::InfIterator;
-use std::marker::PhantomData;
 use std::ops::Range;
 use std::time::{Duration, SystemTime};
 
 /// A minimal specification of a 64-bit random number generator.
 pub trait Rand64 {
-    /// Return the next random `u64`.
+    /// Returns the next random `u64`.
     fn next_u64(&mut self) -> u64;
+
+    /// Returns the next random `u128`.
+    #[inline(always)]
+    fn next_u128(&mut self) -> u128 {
+        (self.next_u64() as u128) << 64 | (self.next_u64() as u128)
+    }
 
     /// Returns a `bool` with a probability `p` of being true.
     ///
@@ -14,10 +19,10 @@ pub trait Rand64 {
     /// ```
     /// use anode::rand::{Probability, Rand64, Xorshift};
     /// let mut rng = Xorshift::default();
-    /// println!("{}", rng.gen_bool(Probability::new(1.0 / 3.0)));
+    /// println!("{}", rng.next_bool(Probability::new(1.0 / 3.0)));
     /// ```
-    #[inline]
-    fn gen_bool(&mut self, p: Probability) -> bool {
+    #[inline(always)]
+    fn next_bool(&mut self, p: Probability) -> bool {
         let cutoff = (p.0 * u64::MAX as f64) as u64;
         let mut next = self.next_u64();
         if next == u64::MAX {
@@ -44,20 +49,31 @@ impl Probability {
     ///
     /// # Panics
     /// If `p < 0` or `p > 1`.
+    #[inline(always)]
     pub fn new(p: f64) -> Self {
         assert!(p >= 0f64, "p ({p}) cannot be less than 0");
         assert!(p <= 1f64, "p ({p}) cannot be greater than 1");
         Self(p)
     }
+
+    /// Creates a new [`Probability`] value, without checking the bounds. If a
+    /// probability is created outside the range \[0, 1\], its behaviour with an
+    /// RNG is undefined.
+    #[inline(always)]
+    pub const unsafe fn new_unchecked(p: f64) -> Self {
+        Self(p)
+    }
 }
 
 impl From<Probability> for f64 {
+    #[inline(always)]
     fn from(p: Probability) -> Self {
         p.0
     }
 }
 
 impl From<f64> for Probability {
+    #[inline(always)]
     fn from(p: f64) -> Self {
         Probability::new(p)
     }
@@ -71,45 +87,90 @@ pub trait Seeded {
     fn seed(seed: u64) -> Self::Rng;
 }
 
-/// Randomly chooses a duration from a range.
-pub trait RandDuration {
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration;
+pub trait RandLim<N> {
+    /// Generates a random number in `0..N`.
+    fn next_lim(&mut self, lim: N) -> N;
 }
 
-impl<R: Rand64> RandDuration for R {
+impl<R: Rand64> RandLim<u64> for R {
     #[inline(always)]
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+    fn next_lim(&mut self, lim: u64) -> u64 {
+        let cutoff = cutoff_u64(lim);
+        loop {
+            let rand = self.next_u64();
+            if rand <= cutoff {
+                return rand % lim;
+            }
+        }
+    }
+}
+
+impl<R: Rand64> RandLim<u128> for R {
+    #[inline(always)]
+    fn next_lim(&mut self, lim: u128) -> u128 {
+        if lim <= u64::MAX as u128 {
+            self.next_lim(lim as u64) as u128
+        } else {
+            let cutoff = cutoff_u128(lim);
+            loop {
+                let rand = self.next_u128();
+                if rand <= cutoff {
+                    return rand % lim;
+                }
+            }
+        }
+    }
+}
+
+#[inline(always)]
+fn cutoff_u64(lim: u64) -> u64 {
+    let overhang = (u64::MAX - lim + 1) % lim;
+    u64::MAX - overhang
+}
+
+#[inline(always)]
+fn cutoff_u128(lim: u128) -> u128 {
+    let overhang = (u128::MAX - lim + 1) % lim;
+    u128::MAX - overhang
+}
+
+pub trait RandRange<N> {
+    /// Generates a random number in the given range.
+    fn next_range(&mut self, range: Range<N>) -> N;
+}
+
+impl<R: Rand64> RandRange<u64> for R {
+    #[inline(always)]
+    fn next_range(&mut self, range: Range<u64>) -> u64 {
+        if range.is_empty() {
+            return range.start;
+        }
+        let span = range.end - range.start;
+        range.start + self.next_lim(span)
+    }
+}
+
+impl<R: Rand64> RandRange<u128> for R {
+    #[inline(always)]
+    fn next_range(&mut self, range: Range<u128>) -> u128 {
+        if range.is_empty() {
+            return range.start;
+        }
+        let span = range.end - range.start;
+        let random = self.next_lim(span);
+        range.start + random
+    }
+}
+
+impl<R: Rand64> RandRange<Duration> for R {
+    #[inline(always)]
+    fn next_range(&mut self, range: Range<Duration>) -> Duration {
         if range.is_empty() {
             return range.start;
         }
         let span = (range.end - range.start).as_nanos();
-        if span <= u64::MAX as u128 {
-            let span = span as u64;
-            let random = span.gen(self);
-            range.start + Duration::from_nanos(random)
-        } else {
-            let random = span.gen(self);
-            range.start + duration_from_nanos(random)
-        }
-    }
-}
-
-trait GenSpan {
-    fn gen(&self, rng: &mut impl Rand64) -> Self;
-}
-
-impl GenSpan for u64 {
-    #[inline(always)]
-    fn gen(&self, rng: &mut impl Rand64) -> Self {
-        rng.next_u64() % self
-    }
-}
-
-impl GenSpan for u128 {
-    #[inline(always)]
-    fn gen(&self, rng: &mut impl Rand64) -> Self {
-        let random = (rng.next_u64() as u128) << 64 | (rng.next_u64() as u128);
-        random % self
+        let random = self.next_lim(span);
+        range.start + duration_from_nanos(random)
     }
 }
 
@@ -135,12 +196,12 @@ impl Default for FixedDuration {
     }
 }
 
-impl RandDuration for FixedDuration {
+impl RandRange<Duration> for FixedDuration {
     #[inline(always)]
-    fn gen_range(&mut self, range: Range<Duration>) -> Duration {
+    fn next_range(&mut self, range: Range<Duration>) -> Duration {
         const NANOSECOND: Duration = Duration::new(0, 1);
         if range.is_empty() {
-            range.end
+            range.start
         } else {
             range.end - NANOSECOND
         }
@@ -153,6 +214,7 @@ pub struct Xorshift {
 }
 
 impl Default for Xorshift {
+    #[inline(always)]
     fn default() -> Self {
         Self::seed(1)
     }
@@ -210,21 +272,18 @@ impl InfIterator for CyclicSeed {
 
 pub struct LazyRand64<S: Seeded, F: FnOnce() -> u64> {
     state: Option<InitState<S::Rng, F>>,
-    __phantom_data: PhantomData<S>,
 }
 
 impl<S: Seeded, F: FnOnce() -> u64> LazyRand64<S, F> {
     pub fn lazy(f: F) -> Self {
         Self {
             state: Some(InitState::Uninit(f)),
-            __phantom_data: PhantomData::default(),
         }
     }
 
     pub fn eager(rng: S::Rng) -> Self {
         Self {
             state: Some(InitState::Ready(rng)),
-            __phantom_data: PhantomData::default(),
         }
     }
 }
