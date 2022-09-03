@@ -54,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("fastrand/next_range<u128>/small", |b| {
         b.iter(|| rand.u128(0..17u128));
     });
-    c.bench_function("xorshift/next_range<u128>/large", |b| {
+    c.bench_function("fastrand/next_range<u128>/large", |b| {
         b.iter(|| rand.u128(0..1u128 << 80));
     });
 }
