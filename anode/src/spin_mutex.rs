@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use crate::backoff::ExpBackoff;
 use crate::inf_iterator::{InfIterator, IntoInfIterator};
-use crate::rand::{*, LazyRand64, Xorshift};
+use crate::rand::FIXED_DURATION;
 
 unsafe impl<T: ?Sized + Send> Send for SpinMutex<T> {}
 unsafe impl<T: ?Sized + Send> Sync for SpinMutex<T> {}
@@ -66,7 +66,8 @@ impl<T: ?Sized> SpinMutex<T> {
         loop {
             match self.try_lock() {
                 None => {
-                    let mut rng = LazyRand64::<Xorshift, _>::lazy(clock_seed);
+                    // let mut rng = LazyRand64::<Xorshift, _>::lazy(clock_seed);
+                    let mut rng = FIXED_DURATION;
                     let mut backoff = ExpBackoff::sleepy().into_inf_iter();
                     while self.locked.load(Ordering::Relaxed) {
                         hint::spin_loop();
