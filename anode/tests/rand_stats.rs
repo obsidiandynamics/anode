@@ -4,13 +4,13 @@ use rand::{RngCore, SeedableRng};
 use anode::rand::{Rand64, Seeded, Wyrand, Xorshift};
 
 #[test]
-fn convergence_xorshift() {
-    __convergence::<Xorshift>(Options::default());
+fn mean_convergence_xorshift() {
+    __mean_convergence::<Xorshift>(Options::default());
 }
 
 #[test]
-fn convergence_wyrand() {
-    __convergence::<Wyrand>(Options::default());
+fn mean_convergence_wyrand() {
+    __mean_convergence::<Wyrand>(Options::default());
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl Options {
     }
 }
 
-fn __convergence<S: Seeded>(opts: Options) {
+fn __mean_convergence<S: Seeded>(opts: Options) {
     opts.validate();
 
     let allowed_width: u64 = (u64::MAX as f64 * opts.tolerance / 2.0) as u64;
@@ -48,21 +48,21 @@ fn __convergence<S: Seeded>(opts: Options) {
     let expectation_min: u64 = expectation - allowed_width;
     let expectation_max: u64 = expectation + allowed_width;
 
-    let mut driver = StdRng::seed_from_u64(0);
+    let mut control_rand = StdRng::seed_from_u64(0);
 
     for cycle in 0..opts.cycles {
-        let seed = driver.next_u64();
+        let seed = control_rand.next_u64();
         let mut rng = S::seed(seed);
         let mut sum = 0u128;
         for iter in 1..=opts.max_iters {
             sum += rng.next_u64() as u128;
             if iter >= opts.min_iters {
-                let avg = (sum as f64 / iter as f64) as u64;
+                let mean = (sum as f64 / iter as f64) as u64;
                 // println!("iter={iter}, avg={avg}");
-                if avg < expectation_min || avg > expectation_max {
+                if mean < expectation_min || mean > expectation_max {
                     if iter >= opts.max_iters {
-                        assert!(avg >= expectation_min, "{avg} < {expectation_min} after {iter} iterations for seed {seed} [cycle {cycle}, {opts:?}, {}]", any::type_name::<S>());
-                        assert!(avg <= expectation_max, "{avg} > {expectation_max} after {iter} iterations for seed {seed} [cycle {cycle}, {opts:?}, {}]", any::type_name::<S>());
+                        assert!(mean >= expectation_min, "{mean} < {expectation_min} after {iter} iterations for seed {seed} [cycle {cycle}, {opts:?}, {}]", any::type_name::<S>());
+                        assert!(mean <= expectation_max, "{mean} > {expectation_max} after {iter} iterations for seed {seed} [cycle {cycle}, {opts:?}, {}]", any::type_name::<S>());
                     }
                 } else {
                     break;
