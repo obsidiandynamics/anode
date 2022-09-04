@@ -1,6 +1,7 @@
-use std::env;
+use std::{env, io};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::io::{ErrorKind, stdout, Write};
 use std::process::exit;
 use std::str::FromStr;
 use anode::rand::{Rand64, Wyrand, Xorshift};
@@ -78,7 +79,13 @@ fn generate() -> Result<(), Box<dyn Error>> {
 
     let generator = Generator::from_str(&args[1])?;
     let format = OutputFormat::from_str(&args[2])?;
-    let count = u64::from_str(&args[3])?;
+    let count = &args[3];
+    let count = count.replace("K", "000");
+    let count = count.replace("M", "000000");
+    let count = count.replace("B", "000000000");
+    let count = count.replace("G", "000000000");
+    let count = count.replace("T", "000000000000");
+    let count = u64::from_str(&count)?;
 
     let rand: Box<dyn Rand64> = match generator {
         Generator::Xorshift => Box::new(Xorshift::default()),
@@ -88,7 +95,7 @@ fn generate() -> Result<(), Box<dyn Error>> {
 
     match format {
         OutputFormat::Text => generate_text(&args[1], count, rand),
-        OutputFormat::Binary => unimplemented!()
+        OutputFormat::Binary => generate_bin(count, rand)
     }
 }
 
@@ -104,4 +111,46 @@ fn generate_text(rand_name: &str, count: u64, mut rand: Box<dyn Rand64>) -> Resu
         println!("{}", random);
     }
     Ok(())
+}
+
+fn generate_bin(count: u64, mut rand: Box<dyn Rand64>) -> Result<(), Box<dyn Error>> {
+    let mut out = stdout();
+    let mut buf = [0u8; 8];
+    let mut samples = 0;
+    loop {
+        let rand = rand.next_u64();
+        buf[0] = rand as u8;
+        buf[1] = (rand >> 8) as u8;
+        buf[2] = (rand >> 16) as u8;
+        buf[3] = (rand >> 24) as u8;
+        buf[4] = (rand >> 32) as u8;
+        buf[5] = (rand >> 40) as u8;
+        buf[6] = (rand >> 48) as u8;
+        buf[7] = (rand >> 56) as u8;
+        out.write(&buf).suppress()?;
+
+        samples += 1;
+        if samples == count {
+            break;
+        }
+    }
+    Ok(())
+}
+
+trait SuppressBrokenPipe {
+    fn suppress(self) -> io::Result<usize>;
+}
+
+impl SuppressBrokenPipe for io::Result<usize> {
+    fn suppress(self) -> io::Result<usize> {
+        match self {
+            Ok(_) => self,
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::BrokenPipe => Ok(0),
+                    _ => Err(err),
+                }
+            }
+        }
+    }
 }
