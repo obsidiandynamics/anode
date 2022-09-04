@@ -9,3 +9,7 @@ coverage
 *.profraw
 /doc
 log.txt
+xorshift.txt
+wyrand.txt
+cycle.txt
+out.txt
