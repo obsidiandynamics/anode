@@ -95,13 +95,16 @@ pub trait RandLim<N> {
 impl<R: Rand64> RandLim<u64> for R {
     #[inline(always)]
     fn next_lim(&mut self, lim: u64) -> u64 {
-        let cutoff = cutoff_u64(lim);
-        loop {
-            let rand = self.next_u64();
-            if rand <= cutoff {
-                return rand % lim;
+        let mut full = self.next_u64() as u128 * lim as u128;
+        let mut low = full as u64;
+        if low < lim {
+            let cutoff = lim.wrapping_neg() % lim;
+            while low < cutoff {
+                full = self.next_u64() as u128 * lim as u128;
+                low = full as u64;
             }
         }
+        (full >> 64) as u64
     }
 }
 
@@ -122,11 +125,11 @@ impl<R: Rand64> RandLim<u128> for R {
     }
 }
 
-#[inline(always)]
-fn cutoff_u64(lim: u64) -> u64 {
-    let overhang = (u64::MAX - lim + 1) % lim;
-    u64::MAX - overhang
-}
+// #[inline(always)]
+// fn cutoff_u64(lim: u64) -> u64 {
+//     let overhang = (u64::MAX - lim + 1) % lim;
+//     u64::MAX - overhang
+// }
 
 #[inline(always)]
 fn cutoff_u128(lim: u128) -> u128 {
@@ -209,36 +212,71 @@ impl RandRange<Duration> for FixedDuration {
 }
 
 /// Basic [Xorshift](https://en.wikipedia.org/wiki/Xorshift) RNG.
-pub struct Xorshift {
-    seed: u64,
-}
+pub struct Xorshift(u64);
 
 impl Default for Xorshift {
     #[inline(always)]
     fn default() -> Self {
-        Self::seed(1)
+        Self(1)
     }
 }
 
 impl Rand64 for Xorshift {
     #[inline(always)]
     fn next_u64(&mut self) -> u64 {
-        let mut s = self.seed;
+        let mut s = self.0;
         s ^= s << 13;
         s ^= s >> 7;
+        self.0 = s;
         s ^= s << 17;
-        self.seed = s;
         s
+
+        // let s = self.0 ^ (self.0 << 13);
+        // self.0 = s ^ (s >> 7);
+        // self.0 ^ (self.0 << 17)
+
+
+        // let mut s = self.0 ^ (self.0 << 13);
+        // s ^= s >> 7;
+        // self.0 = s ^ (s << 17);
+        // self.0
     }
 }
 
 impl Seeded for Xorshift {
     type Rng = Xorshift;
 
-    #[inline]
+    #[inline(always)]
     fn seed(seed: u64) -> Self::Rng {
         // a zero seed disables Xorshift, rendering it (effectively) a constant; hence, we avoid it
-        Self { seed: if seed == 0 { u64::MAX >> 1 } else { seed } }
+        Self(if seed == 0 { u64::MAX >> 1 } else { seed })
+    }
+}
+
+pub struct Wyrand(u64);
+
+impl Default for Wyrand {
+    #[inline(always)]
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
+impl Rand64 for Wyrand {
+    #[inline(always)]
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0xA0761D6478BD642F);
+        let r = self.0 as u128 * (self.0 ^ 0xE7037ED1A0B428DB) as u128;
+        (r as u64) ^ (r >> 64) as u64
+    }
+}
+
+impl Seeded for Wyrand {
+    type Rng = Wyrand;
+
+    #[inline(always)]
+    fn seed(seed: u64) -> Self::Rng {
+        Self(seed)
     }
 }
 

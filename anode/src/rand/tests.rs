@@ -161,7 +161,7 @@ fn random_duration() {
 #[test]
 fn xorshift_constant_with_zero_seed() {
     // initialise with 0 seed for testing only; the user cannot initialise Xorshift with 0
-    let mut rng = Xorshift { seed: 0 };
+    let mut rng = Xorshift(0);
     assert_eq!(0, rng.next_u64());
     assert_eq!(0, rng.next_u64());
 }
@@ -169,15 +169,15 @@ fn xorshift_constant_with_zero_seed() {
 #[test]
 fn xorshift_seed() {
     let mut rng = Xorshift::seed(0); // should not initialise from 0 seed under the hood
-    assert_eq!(u64::MAX >> 1, rng.seed);
+    assert_eq!(u64::MAX >> 1, rng.0);
     assert_ne!(0, rng.next_u64());
 
     let mut rng = Xorshift::seed(1); // every nonzero seed is okay
-    assert_eq!(1, rng.seed);
+    assert_eq!(1, rng.0);
     assert_ne!(0, rng.next_u64());
 
     let mut rng = Xorshift::seed(u64::MAX); // every nonzero seed is okay
-    assert_eq!(u64::MAX, rng.seed);
+    assert_eq!(u64::MAX, rng.0);
     assert_ne!(0, rng.next_u64());
 }
 
@@ -250,13 +250,6 @@ fn probability_panics_lt_0() {
 #[should_panic(expected="cannot be greater than 1")]
 fn probability_panics_gt_1() {
     Probability::new(1f64 + f64::EPSILON);
-}
-
-#[test]
-fn test_cutoff_u64() {
-    assert_eq!(u64::MAX, cutoff_u64(1));
-    assert_eq!(u64::MAX, cutoff_u64(2));
-    assert_eq!(u64::MAX - 1, cutoff_u64(3));
 }
 
 #[test]

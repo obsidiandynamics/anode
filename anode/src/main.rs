@@ -1,4 +1,4 @@
-use anode::rand::{clock_seed, Probability, Rand64, Seeded, Xorshift};
+use anode::rand::{clock_seed, Probability, Rand64, Seeded, Wyrand, Xorshift};
 
 fn main() {
     //TODO
@@ -18,4 +18,9 @@ fn main() {
     let n = 13u64;
     let m = (u64::MAX - n) % n;
     dbg!((n, m));
+
+    let mut w = Wyrand::default();
+    for _ in 0..100 {
+        println!("next = {}", w.next_u64());
+    }
 }
