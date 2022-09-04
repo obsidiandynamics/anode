@@ -1,10 +1,10 @@
-use std::{env, io};
+use anode::rand::{Rand64, Wyrand, Xorshift};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::io::{ErrorKind, stdout, Write};
+use std::io::{stdout, ErrorKind, Write};
 use std::process::exit;
 use std::str::FromStr;
-use anode::rand::{Rand64, Wyrand, Xorshift};
+use std::{env, io};
 
 fn main() {
     if let Err(err) = generate() {
@@ -27,7 +27,7 @@ impl Error for GeneratorError {}
 enum Generator {
     Xorshift,
     Wyrand,
-    Cycle
+    Cycle,
 }
 
 impl FromStr for Generator {
@@ -38,14 +38,14 @@ impl FromStr for Generator {
             "xorshift" => Ok(Self::Xorshift),
             "wyrand" => Ok(Self::Wyrand),
             "cycle" => Ok(Self::Cycle),
-            _ => Err(format!("unknown generator '{}'", s))
+            _ => Err(format!("unknown generator '{}'", s)),
         }
     }
 }
 
 enum OutputFormat {
     Text,
-    Binary
+    Binary,
 }
 
 impl FromStr for OutputFormat {
@@ -55,7 +55,7 @@ impl FromStr for OutputFormat {
         match s {
             "text" => Ok(Self::Text),
             "binary" => Ok(Self::Binary),
-            _ => Err(format!("unknown output format '{}'", s))
+            _ => Err(format!("unknown output format '{}'", s)),
         }
     }
 }
@@ -73,7 +73,10 @@ impl Rand64 for Cycle {
 fn generate() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     if args.len() != 4 {
-        eprintln!("usage: {} <generator ∈ {{xorshift, wyrand}}> <format ∈ {{text, binary}}> <count ∈ ℕ⁺>", args[0]);
+        eprintln!(
+            "usage: {} <generator ∈ {{xorshift, wyrand}}> <format ∈ {{text, binary}}> <count ∈ ℕ⁺>",
+            args[0]
+        );
         exit(1);
     }
 
@@ -95,20 +98,31 @@ fn generate() -> Result<(), Box<dyn Error>> {
 
     match format {
         OutputFormat::Text => generate_text(&args[1], count, rand),
-        OutputFormat::Binary => generate_bin(count, rand)
+        OutputFormat::Binary => generate_bin(count, rand),
     }
 }
 
-fn generate_text(rand_name: &str, count: u64, mut rand: Box<dyn Rand64>) -> Result<(), Box<dyn Error>> {
+fn generate_text(
+    rand_name: &str,
+    count: u64,
+    mut rand: Box<dyn Rand64>,
+) -> Result<(), Box<dyn Error>> {
     println!("#==================================================================");
     println!("# generator {}", rand_name);
     println!("#==================================================================");
     println!("type: d");
     println!("count: {count}");
     println!("numbit: 64");
+    let mut out = stdout();
+    let newline = "\n".as_bytes();
     for _ in 0..count {
         let random = rand.next_u64();
-        println!("{}", random);
+        let s = random.to_string();
+        if out.write(s.as_bytes()).suppress()?.is_broken_pipe()
+            || out.write(newline).suppress()?.is_broken_pipe()
+        {
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -127,7 +141,9 @@ fn generate_bin(count: u64, mut rand: Box<dyn Rand64>) -> Result<(), Box<dyn Err
         buf[5] = (rand >> 40) as u8;
         buf[6] = (rand >> 48) as u8;
         buf[7] = (rand >> 56) as u8;
-        out.write(&buf).suppress()?;
+        if out.write(&buf).suppress()?.is_broken_pipe() {
+            return Ok(());
+        }
 
         samples += 1;
         if samples == count {
@@ -137,20 +153,29 @@ fn generate_bin(count: u64, mut rand: Box<dyn Rand64>) -> Result<(), Box<dyn Err
     Ok(())
 }
 
+enum WriteOutcome {
+    Written(usize),
+    BrokenPipe,
+}
+
+impl WriteOutcome {
+    fn is_broken_pipe(&self) -> bool {
+        matches!(&self, Self::BrokenPipe)
+    }
+}
+
 trait SuppressBrokenPipe {
-    fn suppress(self) -> io::Result<usize>;
+    fn suppress(self) -> io::Result<WriteOutcome>;
 }
 
 impl SuppressBrokenPipe for io::Result<usize> {
-    fn suppress(self) -> io::Result<usize> {
+    fn suppress(self) -> io::Result<WriteOutcome> {
         match self {
-            Ok(_) => self,
-            Err(err) => {
-                match err.kind() {
-                    ErrorKind::BrokenPipe => Ok(0),
-                    _ => Err(err),
-                }
-            }
+            Ok(bytes) => Ok(WriteOutcome::Written(bytes)),
+            Err(err) => match err.kind() {
+                ErrorKind::BrokenPipe => Ok(WriteOutcome::BrokenPipe),
+                _ => Err(err),
+            },
         }
     }
 }
