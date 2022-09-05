@@ -3,12 +3,12 @@ set -e
 
 # continuously test the system, using alternating values for the release profile and the number of test threads
 while [ true ]; do
-  echo "Release + single-threaded"
-  cargo test --release -- --test-threads 1
-  echo "Debug + single-threaded"
-  cargo test -- --test-threads 1
-  echo "Release + multi-threaded"
-  cargo test --release
-  echo "Debug + multi-threaded"
-  cargo test
+  echo "[$(date)] Release + single-threaded"
+  cargo test --profile release -- --test-threads 1
+  echo "[$(date)] Debug + single-threaded"
+  cargo test --profile dev -- --test-threads 1
+  echo "[$(date)] Release + multi-threaded"
+  cargo test --profile release
+  echo "[$(date)] Debug + multi-threaded"
+  cargo test --profile dev
 done

@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{Rng, RngCore, thread_rng};
-use anode::rand::{Probability, Rand64, RandRange, Wyrand, Xorshift};
+use anode::rand::{Probability, Rand, RandRange, Wyrand, Xorshift};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut rand = Xorshift::default();

@@ -2,7 +2,7 @@ use std::time::Duration;
 use rand::{Rng, thread_rng};
 use crate::backoff::{ExpBackoff, ExpBackoffAction, NonzeroDuration};
 use crate::inf_iterator::{InfIterator, IntoInfIterator};
-use crate::rand::Rand64;
+use crate::rand::Rand;
 
 #[test]
 #[should_panic]
@@ -44,7 +44,7 @@ fn exp_backoff() {
     assert_eq!(ExpBackoffAction::Nop, it.next());
 }
 
-impl<R: Rng> Rand64 for R {
+impl<R: Rng> Rand for R {
     fn next_u64(&mut self) -> u64 {
         self.next_u64()
     }

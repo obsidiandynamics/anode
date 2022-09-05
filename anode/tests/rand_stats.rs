@@ -1,7 +1,7 @@
 use std::any;
 use rand::rngs::{StdRng};
 use rand::{RngCore, SeedableRng};
-use anode::rand::{Rand64, Seeded, Wyrand, Xorshift};
+use anode::rand::{Rand, Seeded, Wyrand, Xorshift};
 
 #[test]
 fn mean_convergence_xorshift() {

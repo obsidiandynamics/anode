@@ -7,6 +7,7 @@ authors = ["Emil Koutanov"]
 license = "MIT"
 description = "Concurrency library for Rust."
 repository = "https://github.com/obsidiandynamics/anode"
+keywords = ["concurrent", "sync", "mutex", "lock", "parallel"]
 
 [dev-dependencies]
 rand = "0.8.5"

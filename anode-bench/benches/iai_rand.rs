@@ -1,5 +1,5 @@
 use iai::{main};
-use anode::rand::{Probability, Rand64, Xorshift};
+use anode::rand::{Probability, Rand, Xorshift};
 
 fn xorshift_next_u64() -> u64 {
     let mut rand = Xorshift::default();

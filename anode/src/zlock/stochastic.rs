@@ -2,7 +2,7 @@ use std::time::Duration;
 use crate::deadline::Deadline;
 use crate::inf_iterator::{InfIterator};
 use crate::monitor::{Directive, Monitor, SpeculativeMonitor};
-use crate::rand::{Rand64, Seeded, Xorshift, CyclicSeed, Probability};
+use crate::rand::{Rand, Seeded, Xorshift, CyclicSeed, Probability};
 use crate::zlock::{Moderator};
 
 #[derive(Debug)]

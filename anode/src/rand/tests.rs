@@ -1,3 +1,6 @@
+//! Crude, quasi-statistical tests for verifying that an RNG appears to generate random samples,
+//! more or less.
+
 use super::*;
 use std::time::Duration;
 
@@ -203,7 +206,7 @@ struct MockRng {
     next: u64,
 }
 
-impl Rand64 for MockRng {
+impl Rand for MockRng {
     fn next_u64(&mut self) -> u64 {
         self.next
     }

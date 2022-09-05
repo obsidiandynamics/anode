@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::time::{Duration, SystemTime};
 
 /// A minimal specification of a 64-bit random number generator.
-pub trait Rand64 {
+pub trait Rand {
     /// Returns the next random `u64`.
     fn next_u64(&mut self) -> u64;
 
@@ -17,7 +17,7 @@ pub trait Rand64 {
     ///
     /// # Example
     /// ```
-    /// use anode::rand::{Probability, Rand64, Xorshift};
+    /// use anode::rand::{Probability, Rand, Xorshift};
     /// let mut rng = Xorshift::default();
     /// println!("{}", rng.next_bool(Probability::new(1.0 / 3.0)));
     /// ```
@@ -81,7 +81,7 @@ impl From<f64> for Probability {
 
 /// The means for seeding an RNG.
 pub trait Seeded {
-    type Rng: Rand64;
+    type Rng: Rand;
 
     /// Creates a new [`Rand64`] instance from the given seed.
     fn seed(seed: u64) -> Self::Rng;
@@ -92,7 +92,7 @@ pub trait RandLim<N> {
     fn next_lim(&mut self, lim: N) -> N;
 }
 
-impl<R: Rand64> RandLim<u64> for R {
+impl<R: Rand> RandLim<u64> for R {
     #[inline(always)]
     fn next_lim(&mut self, lim: u64) -> u64 {
         let mut full = self.next_u64() as u128 * lim as u128;
@@ -108,7 +108,7 @@ impl<R: Rand64> RandLim<u64> for R {
     }
 }
 
-impl<R: Rand64> RandLim<u128> for R {
+impl<R: Rand> RandLim<u128> for R {
     #[inline(always)]
     fn next_lim(&mut self, lim: u128) -> u128 {
         if lim <= u64::MAX as u128 {
@@ -142,7 +142,7 @@ pub trait RandRange<N> {
     fn next_range(&mut self, range: Range<N>) -> N;
 }
 
-impl<R: Rand64> RandRange<u64> for R {
+impl<R: Rand> RandRange<u64> for R {
     #[inline(always)]
     fn next_range(&mut self, range: Range<u64>) -> u64 {
         if range.is_empty() {
@@ -153,7 +153,7 @@ impl<R: Rand64> RandRange<u64> for R {
     }
 }
 
-impl<R: Rand64> RandRange<u128> for R {
+impl<R: Rand> RandRange<u128> for R {
     #[inline(always)]
     fn next_range(&mut self, range: Range<u128>) -> u128 {
         if range.is_empty() {
@@ -165,7 +165,7 @@ impl<R: Rand64> RandRange<u128> for R {
     }
 }
 
-impl<R: Rand64> RandRange<Duration> for R {
+impl<R: Rand> RandRange<Duration> for R {
     #[inline(always)]
     fn next_range(&mut self, range: Range<Duration>) -> Duration {
         if range.is_empty() {
@@ -221,7 +221,7 @@ impl Default for Xorshift {
     }
 }
 
-impl Rand64 for Xorshift {
+impl Rand for Xorshift {
     #[inline(always)]
     fn next_u64(&mut self) -> u64 {
         let mut s = self.0;
@@ -230,16 +230,6 @@ impl Rand64 for Xorshift {
         self.0 = s;
         s ^= s << 17;
         s
-
-        // let s = self.0 ^ (self.0 << 13);
-        // self.0 = s ^ (s >> 7);
-        // self.0 ^ (self.0 << 17)
-
-
-        // let mut s = self.0 ^ (self.0 << 13);
-        // s ^= s >> 7;
-        // self.0 = s ^ (s << 17);
-        // self.0
     }
 }
 
@@ -262,7 +252,7 @@ impl Default for Wyrand {
     }
 }
 
-impl Rand64 for Wyrand {
+impl Rand for Wyrand {
     #[inline(always)]
     fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0xA0761D6478BD642F);
@@ -326,12 +316,12 @@ impl<S: Seeded, F: FnOnce() -> u64> LazyRand64<S, F> {
     }
 }
 
-enum InitState<R: Rand64, F: FnOnce() -> u64> {
+enum InitState<R: Rand, F: FnOnce() -> u64> {
     Uninit(F),
     Ready(R),
 }
 
-impl<S: Seeded, F: FnOnce() -> u64> Rand64 for LazyRand64<S, F> {
+impl<S: Seeded, F: FnOnce() -> u64> Rand for LazyRand64<S, F> {
     fn next_u64(&mut self) -> u64 {
         match self.state.take() {
             Some(InitState::Uninit(f)) => {

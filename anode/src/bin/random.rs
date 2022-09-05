@@ -1,4 +1,4 @@
-use anode::rand::{Rand64, Wyrand, Xorshift};
+use anode::rand::{Rand, Wyrand, Xorshift};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stdout, ErrorKind, Write};
@@ -68,7 +68,7 @@ impl FromStr for OutputFormat {
 #[derive(Default)]
 struct Cycle(u64);
 
-impl Rand64 for Cycle {
+impl Rand for Cycle {
     fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(1);
         self.0
@@ -97,7 +97,7 @@ fn generate() -> Result<u64, Box<dyn Error>> {
     let count = count.replace("P", "000000000000000");
     let count = u64::from_str(&count)?;
 
-    let rand: Box<dyn Rand64> = match generator {
+    let rand: Box<dyn Rand> = match generator {
         Generator::Xorshift => Box::new(Xorshift::default()),
         Generator::Wyrand => Box::new(Wyrand::default()),
         Generator::Cycle => Box::new(Cycle::default()),
@@ -112,7 +112,7 @@ fn generate() -> Result<u64, Box<dyn Error>> {
 fn generate_text(
     rand_name: &str,
     count: u64,
-    mut rand: Box<dyn Rand64>,
+    mut rand: Box<dyn Rand>,
 ) -> Result<u64, Box<dyn Error>> {
     println!("#==================================================================");
     println!("# generator {}", rand_name);
@@ -134,10 +134,9 @@ fn generate_text(
     Ok(count)
 }
 
-fn generate_bin(count: u64, mut rand: Box<dyn Rand64>) -> Result<u64, Box<dyn Error>> {
+fn generate_bin(count: u64, mut rand: Box<dyn Rand>) -> Result<u64, Box<dyn Error>> {
     let mut out = stdout();
     let mut buf = [0u8; 8];
-    let mut samples = 0;
     for iter in 1..=count {
         let rand = rand.next_u64();
         buf[0] = rand as u8;
