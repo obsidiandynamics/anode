@@ -108,22 +108,24 @@ fn wait_for_notify() {
         monitor.wait_for_num_waiting(Ordering::is_eq, 1, LONG_WAIT).unwrap();
 
         // raise the flag and notify one thread (there should only be one waiting)
-        let guard = monitor.enter(|flag| {
-            *flag = true;
+        let mut raised = false;
+        monitor.enter(|flag| {
+            if !raised {
+                raised = true;
+                *flag = true;
+            }
             Directive::NotifyOne
         });
-        drop(guard);
 
         // wait for t_2 to wake from the notification
         t_2_waited.wait();
         monitor.wait_for_num_waiting(Ordering::is_eq, 0, LONG_WAIT).unwrap();
 
         // the flag should have been lowered by the woken thread
-        let guard = monitor.enter(|flag| {
+        monitor.enter(|flag| {
             assert!(!*flag);
             Directive::Return
         });
-        drop(guard);
 
         t_2.join().unwrap();
     }
@@ -177,8 +179,12 @@ fn wait_for_notify_twice() {
         monitor.wait_for_num_waiting(Ordering::is_eq, 2, LONG_WAIT).unwrap();
 
         // raise the flag and notify one thread (out of two)
+        let mut raised = false;
         monitor.enter(|flag| {
-            *flag = true;
+            if !raised {
+                raised = true;
+                *flag = true;
+            }
             Directive::NotifyOne
         });
 
@@ -198,8 +204,12 @@ fn wait_for_notify_twice() {
         });
 
         // raise the flag and notify the remaining thread
+        let mut raised = false;
         monitor.enter(|flag| {
-            *flag = true;
+            if !raised {
+                raised = true;
+                *flag = true;
+            }
             Directive::NotifyOne
         });
 
@@ -266,8 +276,12 @@ fn wait_for_notify_all() {
         monitor.wait_for_num_waiting(Ordering::is_eq, 2, LONG_WAIT).unwrap();
 
         // raise the flag and notify all threads
+        let mut raised = false;
         monitor.enter(|flag| {
-            *flag = true;
+            if !raised {
+                raised = true;
+                *flag = true;
+            }
             Directive::NotifyAll
         });
 
@@ -345,8 +359,12 @@ fn wait_notify_chain() {
     monitor.wait_for_num_waiting(Ordering::is_eq, 3, LONG_WAIT).unwrap();
 
     // once the value is set to 2, t_2 should wake and cascade through all others
+    let mut assigned = false;
     monitor.enter(|val| {
-        *val = 2; // this trips t_2
+        if !assigned {
+            assigned = true;
+            *val = 2; // this trips t_2
+        }
         Directive::NotifyAll
     });
 
