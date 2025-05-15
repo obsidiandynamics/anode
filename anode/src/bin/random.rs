@@ -19,7 +19,7 @@ fn main() {
 }
 
 #[derive(Debug)]
-struct GeneratorError(String);
+pub struct GeneratorError(String);
 
 impl Display for GeneratorError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -154,7 +154,7 @@ fn generate_bin(count: u64, mut rand: Box<dyn Rand>) -> Result<u64, Box<dyn Erro
     Ok(count)
 }
 
-enum WriteOutcome {
+pub enum WriteOutcome {
     Written(usize),
     BrokenPipe,
 }
