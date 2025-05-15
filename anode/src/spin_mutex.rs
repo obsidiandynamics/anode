@@ -38,7 +38,10 @@ impl<T> SpinMutex<T> {
 
 impl<'a, T: ?Sized> Drop for SpinGuard<'a, T> {
     fn drop(&mut self) {
-        self.lock.unlock();
+        // SAFETY: can only be called by the lock's owner.
+        unsafe {
+            self.lock.unlock();
+        }
     }
 }
 
@@ -92,7 +95,7 @@ impl<T: ?Sized> SpinMutex<T> {
     }
 
     #[inline]
-    pub fn unlock(&self) {
+    pub unsafe fn unlock(&self) {
         self.locked.store(false, Ordering::Release);
     }
 
