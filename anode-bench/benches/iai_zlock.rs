@@ -35,12 +35,14 @@ fn stochastic_write() {
 
 fn std_read() {
     let lock = RwLock::new(());
-    let _ = black_box(lock.read().remedy());
+    let _unused = black_box(lock.read().remedy());
+    drop(_unused);
 }
 
 fn std_write() {
     let lock = RwLock::new(());
-    let _ = black_box(lock.write().remedy());
+    let _unused = black_box(lock.write().remedy());
+    drop(_unused);
 }
 
 main!(
